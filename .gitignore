@@ -1,0 +1,16 @@
+*.pyc
+*.pyo
+*.o
+*.db
+*.pot
+*.doctree
+.doctrees
+nextgen.pyx
+c_nextgen
+test.c
+test.eps
+tmp.c
+build/
+docs/build/
+dist/
+BCK/
