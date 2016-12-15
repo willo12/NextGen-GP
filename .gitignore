@@ -5,6 +5,7 @@
 *.pot
 *.doctree
 .doctrees
+nextgen.so
 nextgen.c
 c_nextgen
 test.c
