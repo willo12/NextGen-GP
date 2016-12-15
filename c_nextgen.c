@@ -47,7 +47,7 @@ One way is to calculate expected string length during tree construction?
 #define MAXDEPTH 4
 #define FPR 0.5
 #define PPR 0.6
-#define PNEW 0.001
+#define PNEW 0.02
 #define BREEDINGRATE 0.3
 #define MUTATIONRATE 0.08
 
@@ -3428,7 +3428,7 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
   // Create a small spot with increased mutation rate
   if (  (qsubs > 16) &&   (my_number_y <= 1) && ( my_number_x <= 1)    ) 
   {
-    mutationrate = 0.5;
+    mutationrate = 0.4;
   }
 #endif
 
