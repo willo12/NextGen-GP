@@ -47,24 +47,26 @@ def normalize(series):
   return series/series[0]
 
 
-
+if __name__ == "__main__":
 
 # disk dir names vs display names
-names = {'SL_t800k_q484_p80_col1_12':'SL1','JUN_dust':'current'} 
+  names = {'SL_t800k_q484_p80_col1_12':'SL1','JUN_dust':'current'} 
 
-show_min = True
-if len(sys.argv)>1:
-   if sys.argv[1] == "nomin":
-     show_min = False
+  i_field=0
+  show_legend = False
+  show_min = True
+  if len(sys.argv)>1:
+     if sys.argv[1] == "nomin":
+       show_min = False
 
-cutoff = 100
+  cutoff = 100
 
-#exps = [ ('SL_t800k_q484_p80_col1_12',484)]
-exps = [ ('JUN_dust',625)]
+  #exps = [ ('SL_t800k_q484_p80_col1_12',484)]
+  exps = [ ('JUN_dust',625)]
 
-#exps = [ ('TEST',4),('TEST_05',4),('TEST_095',4)]
+  #exps = [ ('TEST',4),('TEST_05',4),('TEST_095',4)]
 
-data = [(get_report(exp,size),exp,size) for exp,size in exps]
+  data = [(get_report(exp,size),exp,size) for exp,size in exps]
 
 
 
@@ -73,31 +75,31 @@ data = [(get_report(exp,size),exp,size) for exp,size in exps]
 #k+=1;print "min data%d: %g"%(k,np.nanmin(data1[:,:,i]))
 #k+=1;print "min data%d: %g"%(k,np.nanmin(data2[:,:,i]))
 
-colors = ['k','r','g','b','y','c']
+  colors = ['k','r','g','b','y','c']
 
-pan = 0
+  pan = 0
 
-height = 2
-width = 2
+  height = 1
+  width = 1
 
-rows = 2
-cols = 2
+  rows = 1
+  cols = 1
 
-ax = plt.subplot2grid((height, width), (int(np.floor(pan/cols)), pan%cols) )
+  ax = plt.subplot2grid((height, width), (int(np.floor(pan/cols)), pan%cols) )
 
-i_field=0
-for i,(report, exp,size) in enumerate(data):
-  color=colors[i%len(colors)]
-  plt.plot(np.nanmean(report[:cutoff,:,i_field],1),'--',color=color);
-  if exp in names:
-    label = names[exp]
-  else:
-    label = exp
-    print("Using raw exp name")
 
-  plt.plot(np.mean(report[:,:,i_field],1),color=color, label=label);
-  if show_min is True:
-    plt.plot(np.nanmin(report[:cutoff,:,i_field],1),'.',color=color);
+  for i,(report, exp,size) in enumerate(data):
+    color=colors[i%len(colors)]
+    plt.plot(np.nanmean(report[:cutoff,:,i_field],1),'--',color=color);
+    if exp in names:
+      label = names[exp]
+    else:
+      label = exp
+      print("Using raw exp name")
+
+    plt.plot(np.mean(report[:,:,i_field],1),color=color, label=label);
+    if show_min is True:
+      plt.plot(np.nanmin(report[:cutoff,:,i_field],1),'.',color=color);
 
 #plt.plot(np.nanmean(data2[:,:,i],1),'--',color='r', label="data2");
 #plt.plot(np.mean(data2[:,:,i],1),color='r', label="data2");
@@ -109,9 +111,11 @@ for i,(report, exp,size) in enumerate(data):
 #plt.plot(np.mean(data1[:,:,i],1),color='k', label="data1");
 #plt.plot(np.mean(data2[:,:,i],1),color='r', label="data2");
 
-plt.xlabel('Iteration')
-plt.ylabel('Score')
+  plt.xlabel('Iteration')
+  plt.ylabel('Score')
 
-plt.legend()
-plt.grid();plt.show()
+  if show_legend:
+    plt.legend()
+
+  plt.grid();plt.show()
 
