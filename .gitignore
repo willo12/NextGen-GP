@@ -5,7 +5,7 @@
 *.pot
 *.doctree
 .doctrees
-nextgen.pyx
+nextgen.c
 c_nextgen
 test.c
 test.eps
