@@ -73,20 +73,20 @@ struct fun {
   unsigned char argtypes[MAXCHILD];  
 };
 
-struct node {
+typedef struct node {
   int op;
   void * children[MAXCHILD];
-};
+} Node;
 
 int numpar;
 double buffers[STACKSIZE][SPACEDIM];
 
-struct node *talloc(void);
+Node *talloc(void);
 int *make_int(int);
 double *make_double(double);
 
-void interp_node(struct node *tree, int i_tofill);
-char* node2str(struct node *tree, char trstr[]);
+void interp_node(Node *tree, int i_tofill);
+char* node2str(Node *tree, char trstr[]);
 
 char* instrsetnodes = "QEOTLASMIV"; /* for printing */
 char* instrset = "ASM"; /* used at runtime */
@@ -107,32 +107,32 @@ char treebuffer[TREEBUFFER];
 char treestr1[MAXTREESTR];
 char treestr2[MAXTREESTR];
 
-char* (*code2str_table[OPTABLE])(struct node *tree, char trstr[]);
-void (*op_table[OPTABLE])(struct node *, int);
+char* (*code2str_table[OPTABLE])(Node *tree, char trstr[]);
+void (*op_table[OPTABLE])(Node *, int);
 
-struct node *copy_node(struct node *tree);
-void free_node(struct node *t);
+Node *copy_node(Node *tree);
+void free_node(Node *t);
 
 
-double get_score(double* ffs,double* result, double *obs, long* I, struct node *newtree, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init, int ts_factor, int startscore_i);
+double get_score(double* ffs,double* result, double *obs, long* I, Node *newtree, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init, int ts_factor, int startscore_i);
 int mutconsts(double *consts[],int size);
-double hillclimb(double* ffs, double* result,double*  obs,long*  I,struct node *newtree, int ffs0, int ffs1, int obs0, int obs1, double *consts[] , int size, double error, double aspect, double* S_init, int ts_factor, int startscore_i);
+double hillclimb(double* ffs, double* result,double*  obs,long*  I,Node *newtree, int ffs0, int ffs1, int obs0, int obs1, double *consts[] , int size, double error, double aspect, double* S_init, int ts_factor, int startscore_i);
 int sectortour(double *score_vals,int popsize,int tour, int sector, int adjacent[]);
-int tournament_size(struct node *trees[], int is,int popsize,int tour);
-int tournament_scsize(struct node *trees[],double *score_vals, int is,int popsize,int tour);
-int reverse_tour_size(struct node *trees[],double *score_vals, int is,int popsize,int tour);
+int tournament_size(Node *trees[], int is,int popsize,int tour);
+int tournament_scsize(Node *trees[],double *score_vals, int is,int popsize,int tour);
+int reverse_tour_size(Node *trees[],double *score_vals, int is,int popsize,int tour);
 int tournament(double *score_vals, int is,int popsize,int tour);
 int reversetour(double *score_vals,int is,int popsize,int tour);
 int * mapsector(int sector,int popsize);
 void  init_fixedforc(double *result, int result0, double *model,int model0);
 int check_brackets(char *tmp_str);
-int check_node(struct node *t);
+int check_node(Node *t);
 int init_tables(void);
 void handle_S_init(double S_init, double* obs, int obs1, double* S_init_array);
 int min(int x, int y);
 int max(int x, int y);
-int tournament_scsize2D(struct node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour);
-int reverse_tour_size2D(struct node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour);
+int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour);
+int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour);
 
 static int arg_table[OPTABLE];
 
@@ -261,9 +261,9 @@ Point calc_max_p(int max_i)
 
 
 
-struct node *copy_node(struct node *tree)
+Node *copy_node(Node *tree)
 {
-  struct node *newnode=talloc();
+  Node *newnode=talloc();
   newnode->op = tree->op;
 
   /* C and P are special as their children are non-standard nodes */
@@ -289,7 +289,7 @@ struct node *copy_node(struct node *tree)
 };
 
 
-struct node *str2node(char text[])
+Node *str2node(char text[])
 {
 
   /* recursively fill node from text containing tree in bracket notation */
@@ -302,7 +302,7 @@ struct node *str2node(char text[])
     return NULL;
   }
 
-  struct node *newnode=talloc();
+  Node *newnode=talloc();
   
   if (text[0] == '(') /* this is not a leaf node */
   {
@@ -350,9 +350,9 @@ indices into string in I, indicating where the pieces start. */
 }
 
 
-struct node *talloc(void)
+Node *talloc(void)
 {
-  struct node *newtree =  (struct node *) calloc(1,sizeof(struct node));
+  Node *newtree =  (Node *) calloc(1,sizeof(Node));
   if (newtree == NULL)
   {
     fprintf(stderr,"Error: cannot calloc newtree in talloc.\n");
@@ -408,12 +408,12 @@ double *make_double(double value)
    Names correspond to node names.
 */
 
-char* nopChr(struct node *tree, char trstr[])
+char* nopChr(Node *tree, char trstr[])
 {
   return trstr;
 };
 
-char* constChr(struct node *tree, char trstr[])
+char* constChr(Node *tree, char trstr[])
 {
 /* convert tree to str where tree is a constant leaf */
   sprintf(trstr,"%g",*((double *) tree->children[0]));
@@ -422,7 +422,7 @@ char* constChr(struct node *tree, char trstr[])
 };
 
 
-char* parChr(struct node *tree, char trstr[])
+char* parChr(Node *tree, char trstr[])
 {
 /* convert tree to str where tree is a par leaf */
 
@@ -439,7 +439,7 @@ char* parChr(struct node *tree, char trstr[])
   The following four functions print functions taking 0,1,2 and 3 argument nodes.
 */
 
-char* zeroFunChr(struct node *tree, char trstr[])
+char* zeroFunChr(Node *tree, char trstr[])
 {
 /* convert tree to str recursively, where root node is an op that takes 0 arguments */
 
@@ -449,7 +449,7 @@ char* zeroFunChr(struct node *tree, char trstr[])
 
 };
 
-char* oneFunChr(struct node *tree, char trstr[])
+char* oneFunChr(Node *tree, char trstr[])
 {
 /* convert tree to str recursively, where root node is an op that takes 1 argument */
 
@@ -465,7 +465,7 @@ char* oneFunChr(struct node *tree, char trstr[])
 */
 
 /*   apply code2str_table[op] to children and put result in tmp_str */
-  (*code2str_table[((struct node *) tree->children[0])->op])( ((struct node *) tree->children[0]),tmp_str );
+  (*code2str_table[((Node *) tree->children[0])->op])( ((Node *) tree->children[0]),tmp_str );
   
   strcat(trstr,  tmp_str   );  /* append tmp_str to trstr */
   sprintf(tmp_str,")%c", tree->op+'A'); /* print )M or )A etc to tmp_str */
@@ -476,7 +476,7 @@ char* oneFunChr(struct node *tree, char trstr[])
 };
 
 /* new generalized 2,3,..FunChr to be used later */
-char* nFunChr(struct node *tree, char trstr[], int n)
+char* nFunChr(Node *tree, char trstr[], int n)
 {
 /* convert tree to str recursively, where root node is an op that takes n arguments */
  
@@ -485,7 +485,7 @@ char* nFunChr(struct node *tree, char trstr[], int n)
   strcpy(trstr,"(");
 
   for (i=0;i<n;i++){  
-    (*code2str_table[((struct node *) tree->children[0])->op])( ((struct node *) tree->children[0]),tmp_str );
+    (*code2str_table[((Node *) tree->children[0])->op])( ((Node *) tree->children[0]),tmp_str );
   strcat(trstr,tmp_str);
     if (i<n-1) /* join on , delimiter */
     {
@@ -501,16 +501,16 @@ char* nFunChr(struct node *tree, char trstr[], int n)
 
 };
 
-char* twoFunChr(struct node *tree, char trstr[])
+char* twoFunChr(Node *tree, char trstr[])
 {
 /* convert tree to str recursively, where root node is an op that takes 2 arguments */
   char tmp_str[MAXTREESTR];
   strcpy(trstr,"(");
   
-  (*code2str_table[((struct node *) tree->children[0])->op])( ((struct node *) tree->children[0]),tmp_str );
+  (*code2str_table[((Node *) tree->children[0])->op])( ((Node *) tree->children[0]),tmp_str );
   strcat(trstr,tmp_str);
   strcat(trstr,",");
-  (*code2str_table[((struct node *) tree->children[1])->op])( ((struct node *) tree->children[1]),tmp_str );
+  (*code2str_table[((Node *) tree->children[1])->op])( ((Node *) tree->children[1]),tmp_str );
   strcat(trstr,tmp_str);  
   sprintf(tmp_str,")%c", tree->op+'A');
   strcat(trstr, tmp_str);
@@ -520,18 +520,18 @@ char* twoFunChr(struct node *tree, char trstr[])
 };
 
 
-char* threeFunChr(struct node *tree, char trstr[])
+char* threeFunChr(Node *tree, char trstr[])
 {
 /* convert tree to str recursively, where root node is an op that takes 3 arguments */
   char tmp_str[MAXTREESTR];
   strcpy(trstr,"(");  
-  (*code2str_table[((struct node *) tree->children[0])->op])( ((struct node *) tree->children[0]),tmp_str );
+  (*code2str_table[((Node *) tree->children[0])->op])( ((Node *) tree->children[0]),tmp_str );
   strcat(trstr,tmp_str);
   strcat(trstr,",");
-  (*code2str_table[((struct node *) tree->children[1])->op])( ((struct node *) tree->children[1]),tmp_str );
+  (*code2str_table[((Node *) tree->children[1])->op])( ((Node *) tree->children[1]),tmp_str );
   strcat(trstr,tmp_str);    
   strcat(trstr,",");
-  (*code2str_table[((struct node *) tree->children[2])->op])( ((struct node *) tree->children[2]),tmp_str );
+  (*code2str_table[((Node *) tree->children[2])->op])( ((Node *) tree->children[2]),tmp_str );
   strcat(trstr,tmp_str);    
   sprintf(tmp_str,")%c", tree->op+'A');
   strcat(trstr, tmp_str);
@@ -542,27 +542,27 @@ char* threeFunChr(struct node *tree, char trstr[])
 /* The following functions are called from the table of operations to execute nodes recursively */
 
 
-double constFun(struct node *tree)
+double constFun(Node *tree)
 {
 /* Yield a constant leaf. Triggered by op code 'C' */
   return *((double *) tree->children[0]); 
 
 };
 
-void nopFun(struct node *tree, int i_tofill)
+void nopFun(Node *tree, int i_tofill)
 {
 /* no operation function to initialize op_table */
 
 };
 
 
-double parFun(struct node *tree)
+double parFun(Node *tree)
 {
 /* Yield a parameter leaf. Triggered by op code 'D' */
   return reg[*((int *) tree->children[0])];
 };
 
-double zeroFun(struct node *tree, int i, double input)
+double zeroFun(Node *tree, int i, double input)
 {
 /* subleaf functions. Apply scalar function. Triggered by subleaf op codes e.g. 'Q' 
    int i: determines what input to use for the scalar function: >-1 signals reg[i], -1 signals input argument.
@@ -607,7 +607,7 @@ double zeroFun(struct node *tree, int i, double input)
   }
 };
 
-double zeroFunInput(struct node *tree, double input)
+double zeroFunInput(Node *tree, double input)
 {
 /* subleaf functions. Apply scalar function to input argument. Triggered by subleaf op codes e.g. 'Q' 
 
@@ -644,7 +644,7 @@ double zeroFunInput(struct node *tree, double input)
 };
 
 
-double zeroFunReg(struct node *tree, int i)
+double zeroFunReg(Node *tree, int i)
 {
 /* subleaf functions. Apply scalar function. Triggered by subleaf op codes e.g. 'Q' 
    use reg[i] as input
@@ -687,7 +687,7 @@ double zeroFunReg(struct node *tree, int i)
 
 // Jump functions
 
-void leafFun(struct node *tree, int i_tofill)
+void leafFun(Node *tree, int i_tofill)
 {
 /* Represents vector of parameters and constants.
 
@@ -700,13 +700,13 @@ void leafFun(struct node *tree, int i_tofill)
 
   for (i=0;i<SPACEDIM;i++)
   { /* interpret child nodes (vector components) here locally instead of via op_table */
-    if ( ((struct node *) tree->children[i])->op == 'C'-'A')
+    if ( ((Node *) tree->children[i])->op == 'C'-'A')
     {
-      buffers[i_tofill][i] = *((double *) ((struct node *) tree->children[i])->children[0]);
+      buffers[i_tofill][i] = *((double *) ((Node *) tree->children[i])->children[0]);
     }
-    else if ( ((struct node *) tree->children[i])->op == 'P'-'A')
+    else if ( ((Node *) tree->children[i])->op == 'P'-'A')
     {
-      buffers[i_tofill][i] = reg[*((int *) ((struct node *) tree->children[i])->children[0])];
+      buffers[i_tofill][i] = reg[*((int *) ((Node *) tree->children[i])->children[0])];
 
                             
     }
@@ -722,15 +722,15 @@ void leafFun(struct node *tree, int i_tofill)
   }
 }
 
-void addFun(struct node *tree, int i_tofill)
+void addFun(Node *tree, int i_tofill)
 {
   /* execute addition node: add the values of the two child nodes. */
 
   /* double buffers[4][SPACEDIM] */
 
   int i;  
-  (*op_table[(  (struct node *) tree->children[0])->op])(((struct node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
-  (*op_table[(  (struct node *) tree->children[1])->op])(((struct node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
+  (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
+  (*op_table[(  (Node *) tree->children[1])->op])(((Node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
 
   for (i=0;i<SPACEDIM;i++)
   {
@@ -739,13 +739,13 @@ void addFun(struct node *tree, int i_tofill)
 
 };
 
-void subFun(struct node *tree, int i_tofill)
+void subFun(Node *tree, int i_tofill)
 {
   /* execute subtraction node: subtract the values of the two child nodes. */
 
   int i;  
-  (*op_table[(  (struct node *) tree->children[0])->op])(((struct node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
-  (*op_table[(  (struct node *) tree->children[1])->op])(((struct node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
+  (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
+  (*op_table[(  (Node *) tree->children[1])->op])(((Node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
 
   for (i=0;i<SPACEDIM;i++)
   {
@@ -754,25 +754,25 @@ void subFun(struct node *tree, int i_tofill)
 
 };
 
-void mulFun(struct node *tree, int i_tofill)
+void mulFun(Node *tree, int i_tofill)
 {
   /* execute multiplication node: multiply the values of the two child nodes. If left node is a function, apply that function to right multiplicant */
 
 #ifdef SPECIAL_MUL
-  struct node *child;
+  Node *child;
 #endif
   int i; 
 
 #ifdef SPECIAL_MUL
-  if ( ((struct node *) tree->children[0])->op == 'V'-'A' ) /* left multiplicant is a vector V: look at each of its components */
+  if ( ((Node *) tree->children[0])->op == 'V'-'A' ) /* left multiplicant is a vector V: look at each of its components */
   { 
 
     /* interpret right multiplicant, and then decide how left multiplicant acts on resulting buffer values for each component */
-    (*op_table[(  (struct node *) tree->children[1])->op])(((struct node *) tree->children[1]),i_tofill+1); /* fills buffer i_tofill+1 */
+    (*op_table[(  (Node *) tree->children[1])->op])(((Node *) tree->children[1]),i_tofill+1); /* fills buffer i_tofill+1 */
 
     for (i=0;i<SPACEDIM;i++)
     { /* get children of left multiplicant */
-      child = ((struct node *) ((struct node *) tree->children[0])->children[i]);
+      child = ((Node *) ((Node *) tree->children[0])->children[i]);
       if ( child->op == 'C'-'A')
       {
         buffers[i_tofill][i] = (*((double *) child->children[0]))*buffers[i_tofill+1][i];  /* left multiplicant is a constant */
@@ -799,8 +799,8 @@ void mulFun(struct node *tree, int i_tofill)
   {
 #endif
 
-    (*op_table[(  (struct node *) tree->children[0])->op])(((struct node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
-    (*op_table[(  (struct node *) tree->children[1])->op])(((struct node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
+    (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
+    (*op_table[(  (Node *) tree->children[1])->op])(((Node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
 
     for (i=0;i<SPACEDIM;i++)
     {
@@ -813,13 +813,13 @@ void mulFun(struct node *tree, int i_tofill)
 
 };
 
-void divFun(struct node *tree, int i_tofill)
+void divFun(Node *tree, int i_tofill)
 {
   /* execute division node: divide the values of the two child nodes. */
 
   int i;  
-  (*op_table[(  (struct node *) tree->children[0])->op])(((struct node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
-  (*op_table[(  (struct node *) tree->children[1])->op])(((struct node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
+  (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
+  (*op_table[(  (Node *) tree->children[1])->op])(((Node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
 
   for (i=0;i<SPACEDIM;i++)
   {
@@ -828,15 +828,15 @@ void divFun(struct node *tree, int i_tofill)
 
 };
 
-void ifFun(struct node *tree, int i_tofill)
+void ifFun(Node *tree, int i_tofill)
 {
   /* execute if-then branching node: execute child 1 if child 0 > 0, child 2 otherwise */
 
   int i;  
 
-  (*op_table[(  (struct node *) tree->children[0])->op])(((struct node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
-  (*op_table[(  (struct node *) tree->children[1])->op])(((struct node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
-  (*op_table[(  (struct node *) tree->children[0])->op])(((struct node *) tree->children[2]),i_tofill+3); /* fills buffer i_tofill+1 */
+  (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
+  (*op_table[(  (Node *) tree->children[1])->op])(((Node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
+  (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[2]),i_tofill+3); /* fills buffer i_tofill+1 */
 
 
   for (i=0;i<SPACEDIM;i++)
@@ -851,12 +851,12 @@ void ifFun(struct node *tree, int i_tofill)
 };
 
 
-void sqrtFun(struct node *tree, int i_tofill)
+void sqrtFun(Node *tree, int i_tofill)
 {
   /* execute square root node: take the square root of the child node. */
 
   int i;  
-  (*op_table[(  (struct node *) tree->children[0])->op])(((struct node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
+  (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
 
   for (i=0;i<SPACEDIM;i++)
   {
@@ -869,14 +869,14 @@ void sqrtFun(struct node *tree, int i_tofill)
 
 /* The following functions deal with intpereting trees and converting them to strings */
 
-void interp_node(struct node *tree, int i_tofill)
+void interp_node(Node *tree, int i_tofill)
 {
 /* Interpret the argument node recursively using the table of operations op_table */
 
   (*op_table[tree->op])(tree, i_tofill);
 };
 
-char* node2str(struct node *tree, char trstr[])
+char* node2str(Node *tree, char trstr[])
 {
 /* convert the argument node to bracket string trstr recursively using the table of codes code2str_table 
    convenience function for code2str_table
@@ -886,10 +886,10 @@ char* node2str(struct node *tree, char trstr[])
 
 /* Random selection utilities */
 
-struct node *child_choice(struct node *t)
+Node *child_choice(Node *t)
 {
   /* Choose a child node randomly */
-  return ((struct node *) t->children[rand()%arg_table[t->op]]);
+  return ((Node *) t->children[rand()%arg_table[t->op]]);
 };
 
 char string_choice(char str[])
@@ -943,7 +943,7 @@ double randomdouble(void)
   }
 }
 
-struct node *makerandomtree(int maxdepth,double fpr,double ppr)
+Node *makerandomtree(int maxdepth,double fpr,double ppr)
 {
   /* Create a random tree 
      fpr probability of creating normal node (recursively)
@@ -955,8 +955,8 @@ struct node *makerandomtree(int maxdepth,double fpr,double ppr)
   int i=0;
   int rnd;
  
-  struct node *child;
-  struct node *result=talloc();
+  Node *child;
+  Node *result=talloc();
 
   rnd = rand();
 
@@ -967,7 +967,7 @@ struct node *makerandomtree(int maxdepth,double fpr,double ppr)
 
     while ( i<arg_table[(int) op] )  
     {  
-      result->children[i] = ((struct node *)  makerandomtree(maxdepth-1,fpr,ppr) );
+      result->children[i] = ((Node *)  makerandomtree(maxdepth-1,fpr,ppr) );
       i++;
     };
   }
@@ -1010,7 +1010,7 @@ struct node *makerandomtree(int maxdepth,double fpr,double ppr)
         child->op = 'C'-'A';
         child->children[0] = make_double(  randomdouble()  );
       };
-      result->children[i] = ((struct node *) child);
+      result->children[i] = ((Node *) child);
      
     };    
   };
@@ -1018,7 +1018,7 @@ struct node *makerandomtree(int maxdepth,double fpr,double ppr)
 };
 
 
-struct node *mrt_steered(int maxdepth,double fpr,double ppr)
+Node *mrt_steered(int maxdepth,double fpr,double ppr)
 {
   char op;
   int i=0;
@@ -1027,7 +1027,7 @@ struct node *mrt_steered(int maxdepth,double fpr,double ppr)
   char tmp_str[MAXTREESTR];
 
 
-  struct node *result;
+  Node *result;
 
   rnd = rand();
 
@@ -1039,7 +1039,7 @@ struct node *mrt_steered(int maxdepth,double fpr,double ppr)
       sprintf(tmp_str,"(%g,(p0,%g)S)M",randomdouble(),randomdouble());
       result = str2node(tmp_str);
 
- /*     ( (struct node *)  result->children[1])->children[1] = ((struct node *)  mrt_steered(maxdepth-1,fpr,ppr) );
+ /*     ( (Node *)  result->children[1])->children[1] = ((Node *)  mrt_steered(maxdepth-1,fpr,ppr) );
 */
     }
     else
@@ -1050,7 +1050,7 @@ struct node *mrt_steered(int maxdepth,double fpr,double ppr)
 
       while ( i<arg_table[(int) op] )  
       {  
-        result->children[i] = ((struct node *)  mrt_steered(maxdepth-1,fpr,ppr) );
+        result->children[i] = ((Node *)  mrt_steered(maxdepth-1,fpr,ppr) );
         i++;
       };
     }
@@ -1080,34 +1080,34 @@ struct node *mrt_steered(int maxdepth,double fpr,double ppr)
 
 
 
-int leaves_equal(struct node *t1,struct node *t2)
+int leaves_equal(Node *t1,Node *t2)
 {
 // return 0 if t1 and t2 are leaf nodes that are equal, 1 otherwise
 
 
-//  struct node *child;
+//  Node *child;
 
 //  int return_val = 1;
 
   int i;
 
-  if ( (  ((struct node *) t1)->op =='V'-'A')  &&  (    ( (struct node *) t2)->op =='V'-'A')   )
+  if ( (  ((Node *) t1)->op =='V'-'A')  &&  (    ( (Node *) t2)->op =='V'-'A')   )
   {
 
 
     for (i=0;i<SPACEDIM;i++)
     { /* get children of left multiplicant */
 
-      if (  ((struct node *) t1->children[i])->op !=  ((struct node *) t2->children[i])->op )
+      if (  ((Node *) t1->children[i])->op !=  ((Node *) t2->children[i])->op )
       {
         return 1;
       }
-      else if ( ( ( (struct node *) t1->children[i])->op == 'C'-'A') && ( (*((double *) ( (struct node *) t1->children[i])->children[0])) != (*((double *) ( (struct node *) t2->children[i])->children[0])) ) )
+      else if ( ( ( (Node *) t1->children[i])->op == 'C'-'A') && ( (*((double *) ( (Node *) t1->children[i])->children[0])) != (*((double *) ( (Node *) t2->children[i])->children[0])) ) )
       {
 
         return 1;
       }
-      else if ( ( ( (struct node *) t1->children[i])->op == 'P'-'A') && ( *((int *) ( (struct node *) t1->children[i])->children[0]) != *((int *) ( (struct node *) t2->children[i])->children[0])  )  )
+      else if ( ( ( (Node *) t1->children[i])->op == 'P'-'A') && ( *((int *) ( (Node *) t1->children[i])->children[0]) != *((int *) ( (Node *) t2->children[i])->children[0])  )  )
       {
         return 1;
       }
@@ -1123,18 +1123,18 @@ int leaves_equal(struct node *t1,struct node *t2)
 
 }
 
-struct node *unifcross(struct node *t1,struct node *t2, double probswap, int top)
+Node *unifcross(Node *t1,Node *t2, double probswap, int top)
 {
   /* Uniform crossover
 
   */
   int i=0;
-  struct node *result;
+  Node *result;
 
   if ( (top==0) && (rand()>probswap*RAND_MAX) )
   { /* terminal. swap t1 for t2 */
  
-    return ((struct node *) copy_node(t2));
+    return ((Node *) copy_node(t2));
   }
   else
   {
@@ -1171,7 +1171,7 @@ struct node *unifcross(struct node *t1,struct node *t2, double probswap, int top
 
       while (i<arg_table[t1->op])
       {
-        result->children[i] = ((struct node *)  unifcross(((struct node *) t1->children[i]) , ((struct node *) t2->children[i]),probswap, 0) );
+        result->children[i] = ((Node *)  unifcross(((Node *) t1->children[i]) , ((Node *) t2->children[i]),probswap, 0) );
         i++;
       }
       return result;
@@ -1187,18 +1187,18 @@ struct node *unifcross(struct node *t1,struct node *t2, double probswap, int top
 
 
 
-struct node *crossover(struct node *t1,struct node *t2,double probswap,int top)
+Node *crossover(Node *t1,Node *t2,double probswap,int top)
 {
   /*
     
   */
 
   int i=0;
-  struct node *result;
+  Node *result;
 
   if ((rand()<probswap*RAND_MAX) && (top==0))
   {
-    return ((struct node *) copy_node(t2));
+    return ((Node *) copy_node(t2));
   }
   else
   {
@@ -1211,25 +1211,25 @@ struct node *crossover(struct node *t1,struct node *t2,double probswap,int top)
       while ( (i<arg_table[t1->op])  )
       {
   
-        result->children[i] = ((struct node *)  crossover(((struct node *) t1->children[i]) , child_choice(t2),probswap, 0) ) ;
+        result->children[i] = ((Node *)  crossover(((Node *) t1->children[i]) , child_choice(t2),probswap, 0) ) ;
         i++;
       };
     }
     else
     { /* leaf nodes return copies of node t1 depending on dice and top!=0 */ 
-      result=((struct node *) copy_node(t1));
+      result=((Node *) copy_node(t1));
     }
-    return ((struct node *) result);
+    return ((Node *) result);
   };
 };
 
 
 
 
-struct node *mutsteered(struct node *t, double probchange)
+Node *mutsteered(Node *t, double probchange)
 {
   int i=0;
-  struct node *result;
+  Node *result;
 
   if ( rand()<probchange*RAND_MAX )
   {
@@ -1246,7 +1246,7 @@ struct node *mutsteered(struct node *t, double probchange)
       while (i<arg_table[t->op])  
       {
   
-        result->children[i] = ((struct node *)  mutsteered(((struct node *) t->children[i]) ,probchange) );
+        result->children[i] = ((Node *)  mutsteered(((Node *) t->children[i]) ,probchange) );
 
         i++;
       };  
@@ -1260,7 +1260,7 @@ struct node *mutsteered(struct node *t, double probchange)
 };
 
 
-struct node *mutate(struct node *t, double probchange)
+Node *mutate(Node *t, double probchange)
 {
   /* 
     Go through tree recursively and roll dice to replace a node and graft new random tree. 
@@ -1271,7 +1271,7 @@ struct node *mutate(struct node *t, double probchange)
   */
 
   int i=0;
-  struct node *result;
+  Node *result;
 
   if ( rand()<probchange*RAND_MAX )
   {
@@ -1287,7 +1287,7 @@ struct node *mutate(struct node *t, double probchange)
 
       while (i<arg_table[t->op])  
       { /* recursively throw dice to replace children with subtrees */
-        result->children[i] = ((struct node *)  mutate(((struct node *) t->children[i]) ,probchange) );
+        result->children[i] = ((Node *)  mutate(((Node *) t->children[i]) ,probchange) );
 
         i++;
       };  
@@ -1301,7 +1301,7 @@ struct node *mutate(struct node *t, double probchange)
   }
 };
 
-struct node *swapmut(struct node *t, double probchange)
+Node *swapmut(Node *t, double probchange)
 {
 /* Swap mutation, rolls dice to swap out a suitable operation somewhere in the tree with one from instrsetswap. 
    If node t takes 2 args, swapmut replaces op in node with a randomly chosen 2-arg op 
@@ -1309,7 +1309,7 @@ struct node *swapmut(struct node *t, double probchange)
 */
 
   int i=0;
-  struct node *result;
+  Node *result;
 
   if (t->op !='V'-'A') 
   {
@@ -1328,7 +1328,7 @@ struct node *swapmut(struct node *t, double probchange)
 
         while (i<arg_table[t->op])  
         {
-          result->children[i] = ((struct node *)  swapmut(((struct node *) t->children[i]) ,probchange) );
+          result->children[i] = ((Node *)  swapmut(((Node *) t->children[i]) ,probchange) );
           i++;
         }
     }
@@ -1344,13 +1344,13 @@ struct node *swapmut(struct node *t, double probchange)
 
 
 
-struct node *hoistmut(struct node *t, double probreturn,int top)
+Node *hoistmut(Node *t, double probreturn,int top)
 {
   /* hoist mutation: throw dice to replace nodes with one of their children.
      acts to shorten/ simplify trees again.
  */
  
-  struct node *result;
+  Node *result;
 
   if (top==1)
   { /* only applied on root: root node always copied */
@@ -1362,7 +1362,7 @@ struct node *hoistmut(struct node *t, double probreturn,int top)
 
     if (t->op !='V'-'A')  // not leaf node
     { /*  only recursion. Hoist up one of the child nodes */
-      result = ((struct node *)  hoistmut(((struct node *) child_choice(t) ) ,probreturn,0) );
+      result = ((Node *)  hoistmut(((Node *) child_choice(t) ) ,probreturn,0) );
     }     
     else // leaf node
     { /* terminal: leaf nodes returned as is  */
@@ -1378,7 +1378,7 @@ struct node *hoistmut(struct node *t, double probreturn,int top)
   return result;
 };
 
-struct node *allmut(struct node *t, double probchange)
+Node *allmut(Node *t, double probchange)
 {
   int rnd;
 
@@ -1412,7 +1412,7 @@ yielding the type
 */
 
 
-void c_doloop(double* ffs,double* result, struct node *tree, int m, int n, double* S_init, int ts_factor)
+void c_doloop(double* ffs,double* result, Node *tree, int m, int n, double* S_init, int ts_factor)
 {
 /* integration loop using simple time stepping.
 
@@ -1532,7 +1532,7 @@ void c_doloop(double* ffs,double* result, struct node *tree, int m, int n, doubl
 }
 
 
-void f_t(double *S,int n, double t_elapsed, double dt_forc, double *ffs, struct node *tree)
+void f_t(double *S,int n, double t_elapsed, double dt_forc, double *ffs, Node *tree)
 { /* deposit S values and forcing in registers reg[] and run tree */
   /* n: number of forcing terms plus time (so n=2 for one forcing term) */
 
@@ -1569,7 +1569,7 @@ void f_t(double *S,int n, double t_elapsed, double dt_forc, double *ffs, struct 
 }
 
 
-void f_t_2D(double *S,int n, double t_elapsed, double dt_forc, double *ffs, struct node *tree)
+void f_t_2D(double *S,int n, double t_elapsed, double dt_forc, double *ffs, Node *tree)
 { /* deposit S values and forcing in registers reg[] and run tree */
 
   /* n: number of forcing terms plus time (so n=2 for one forcing term) */
@@ -1607,7 +1607,7 @@ void f_t_2D(double *S,int n, double t_elapsed, double dt_forc, double *ffs, stru
   (*op_table[tree->op])(tree,0); /* run tree and deposit in buffers[:] */
 }
 
-void RK4(double* ffs,double* result, struct node *tree, int m, int n, double *S_init, int ts_factor)
+void RK4(double* ffs,double* result, Node *tree, int m, int n, double *S_init, int ts_factor)
 {
 /*
   Runge Kutta 4 solver of tree equation. 
@@ -1753,7 +1753,7 @@ void fill_reg2_mod(double* ffs, int steps, int ts_factor, int steps_forc, int n)
   reg[2]= ffs[steps_forc*n+1] + (steps%ts_factor)*(ffs[(steps_forc+1)*n+1] - ffs[steps_forc*n+1])/ts_factor;
 }
 
-void c_doloop_interp(double* ffs,double* result, struct node *tree, int m, int n, double* S_init, int ts_factor)
+void c_doloop_interp(double* ffs,double* result, Node *tree, int m, int n, double* S_init, int ts_factor)
 {
 /* Numerical integration loop. result[0.0] = 1e19 signals failure */
 
@@ -1873,7 +1873,7 @@ void c_map_f(char *treestring, double *A, double *B, int shape_i, int shape_j, d
 {
   /* For specific forcing value, create two 2D arrays of tree values for S vector values between -2 and 2. */
 
-  struct node *tree;
+  Node *tree;
 
   int i,j;
   double dS0, dS1;
@@ -1934,7 +1934,7 @@ void c_map_f(char *treestring, double *A, double *B, int shape_i, int shape_j, d
   free_node(tree);
 }
 
-void f(double *S, struct node *tree)
+void f(double *S, Node *tree)
 {
 
   reg[0]=S[0];
@@ -1946,7 +1946,7 @@ void f(double *S, struct node *tree)
 
 
 
-int compare_trees(struct node *t1, struct node *t2)
+int compare_trees(Node *t1, Node *t2)
 {
 /* determine whether 2 trees are identical. returns 0 when identical, 1 otherwise*/
 
@@ -1970,7 +1970,7 @@ int compare_trees(struct node *t1, struct node *t2)
 
       for (j=0;j<arg_table[t1->op];j++)  
       {
-        if (compare_trees( ((struct node *) t1->children[j]) , ((struct node *) t2->children[j]) ) == 1)
+        if (compare_trees( ((Node *) t1->children[j]) , ((Node *) t2->children[j]) ) == 1)
         {
           return 1;
         }
@@ -1981,7 +1981,7 @@ int compare_trees(struct node *t1, struct node *t2)
 }
 
 
-int tree_in_old(struct node *newtree,  struct node *trees[], int popsize)
+int tree_in_old(Node *newtree,  Node *trees[], int popsize)
 {
   // checks if tree is in array of trees. returns index if yes, -1 otherwise
 
@@ -1999,7 +1999,7 @@ int tree_in_old(struct node *newtree,  struct node *trees[], int popsize)
   return -1;
 }
 
-int conparcount(struct node *t, int *current)
+int conparcount(Node *t, int *current)
 {
   /* counts constants and parameters in a tree */
   int j=0;
@@ -2018,7 +2018,7 @@ int conparcount(struct node *t, int *current)
   {
     while (j<arg_table[t->op])  
     {  
-      if ( conparcount( ((struct node *) t->children[j]),current) > -1 )     
+      if ( conparcount( ((Node *) t->children[j]),current) > -1 )     
       {
         j++;
       }
@@ -2034,7 +2034,7 @@ int conparcount(struct node *t, int *current)
 
 
 
-int tree_consts(struct node *t, double *consts[], int *current, int maxconsts)
+int tree_consts(Node *t, double *consts[], int *current, int maxconsts)
 {
  
   int j=0;
@@ -2059,7 +2059,7 @@ int tree_consts(struct node *t, double *consts[], int *current, int maxconsts)
   {
     while (j<arg_table[t->op])  
     {  
-      if ( tree_consts( ((struct node *) t->children[j]), consts,current,maxconsts) > -1 )     
+      if ( tree_consts( ((Node *) t->children[j]), consts,current,maxconsts) > -1 )     
       {
         j++;
       }
@@ -2083,7 +2083,7 @@ int tree_consts(struct node *t, double *consts[], int *current, int maxconsts)
 
 
 
-void free_node(struct node *t)
+void free_node(Node *t)
 {
 
   if (t == NULL)
@@ -2117,9 +2117,9 @@ void free_node(struct node *t)
   node_count--;
 }
 
-int check_node(struct node *t)
+int check_node(Node *t)
 {
-  struct node *child;
+  Node *child;
 
   if (t == NULL)
   {
@@ -2167,7 +2167,7 @@ int check_node(struct node *t)
 
       for (i=0;i<arg_table[(int) t->op];i++)
       {
-        child = ((struct node *) t->children[i]);
+        child = ((Node *) t->children[i]);
         if (child == NULL)
         {
           fprintf(stderr,"Warning: NULL child node encountered!\n");
@@ -2187,7 +2187,7 @@ int check_node(struct node *t)
     { /* check for illegal children in super-leaf nodes */
       for (i=0;i<arg_table[(int) t->op];i++) /* zero-nodes will always return 0  */
       {
-        child = ((struct node *) t->children[i]);
+        child = ((Node *) t->children[i]);
         if (child == NULL)
         {
           fprintf(stderr,"Warning: NULL child node encountered!\n");
@@ -2336,7 +2336,7 @@ int init_buffer(int popsize)
 
   int i;
   char tmp_str[MAXTREESTR];
-  struct node *yo;
+  Node *yo;
 
   treebuffer[0] = '\0';
         for (i=0;i<popsize;i++)
@@ -2388,7 +2388,7 @@ Point get_boundary(int i_iofile, int i, Point max_loc, int migrants)
 
 }
 
-int migrants2buffer(struct node *trees[],double *score_vals, int i_iofile ,Point max_loc, double* ffs,double* result, double *obs, long* I, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init_array,int ts_factor, int startscore_i, int migrants  )
+int migrants2buffer(Node *trees[],double *score_vals, int i_iofile ,Point max_loc, double* ffs,double* result, double *obs, long* I, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init_array,int ts_factor, int startscore_i, int migrants  )
 {
 /* creates output file with spatially ordered list of trees, depending on the direction of the output file.
 
@@ -2461,7 +2461,7 @@ int migrants2buffer(struct node *trees[],double *score_vals, int i_iofile ,Point
 }
 
 
-int readmigrants(char * infiles[],int i_iofile, struct node *trees[], double *score_vals, Point max_loc, int migrants )
+int readmigrants(char * infiles[],int i_iofile, Node *trees[], double *score_vals, Point max_loc, int migrants )
 {
 /* fill an array of tree structure pointers by translating text tree representations to structures  
 
@@ -2548,7 +2548,7 @@ int readmigrants(char * infiles[],int i_iofile, struct node *trees[], double *sc
 }
 
 
-int readmigrants_buffered(const char *filepath, struct node *trees[], double *score_vals, int low, int hi , int popsize)
+int readmigrants_buffered(const char *filepath, Node *trees[], double *score_vals, int low, int hi , int popsize)
 {
 /* fill an array of tree structure pointers by translating text tree representations to structures  
 
@@ -2559,7 +2559,7 @@ int readmigrants_buffered(const char *filepath, struct node *trees[], double *sc
    opposite of trees2buffer
 */
 
-  struct node *nodes_buffer[MAXTREES+5]; /* can we allocate a smaller amount?? */
+  Node *nodes_buffer[MAXTREES+5]; /* can we allocate a smaller amount?? */
   double scores[MAXTREES+5];
 
   int * bound_low;
@@ -2646,7 +2646,7 @@ int readmigrants_buffered(const char *filepath, struct node *trees[], double *sc
 
 
 
-int trees2buffer(struct node *trees[],int popsize)
+int trees2buffer(Node *trees[],int popsize)
 {
 /* fill the buffer with text representations of tree structures from an array 
 
@@ -2666,7 +2666,7 @@ int trees2buffer(struct node *trees[],int popsize)
   return 0;
 }
 
-int buffer2trees(struct node *trees[])
+int buffer2trees(Node *trees[])
 {
 /* fill an array of tree structure pointers by translating text tree representations to structures  
 
@@ -2744,7 +2744,7 @@ int check_ascii(char *tmp_str)
   return 0;   
 }
 
-int read_data(const char *filepath,struct node *trees[],int maxtrees)
+int read_data(const char *filepath,Node *trees[],int maxtrees)
 {
   char tmp_str[MAXTREESTR];
   int i=0;
@@ -2890,7 +2890,7 @@ double score_fun_aspect(int startscore_i,int obs0,int obs1,double *obs, long* I,
 }
 
 
-double get_score(double* ffs,double* result, double *obs, long* I, struct node *newtree, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init,int ts_factor, int startscore_i)
+double get_score(double* ffs,double* result, double *obs, long* I, Node *newtree, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init,int ts_factor, int startscore_i)
 {
   double error;
 
@@ -2963,7 +2963,7 @@ return 0;
 }
 
 
-double hillclimb(double* ffs, double* result,double*  obs,long*  I,struct node *newtree, int ffs0, int ffs1, int obs0, int obs1, double *consts[] , int size, double error, double aspect, double* S_init, int ts_factor, int startscore_i)
+double hillclimb(double* ffs, double* result,double*  obs,long*  I,Node *newtree, int ffs0, int ffs1, int obs0, int obs1, double *consts[] , int size, double error, double aspect, double* S_init, int ts_factor, int startscore_i)
 {
   int k, km, oldkm, searches;
   double minerror;
@@ -3079,7 +3079,7 @@ int sectortour(double *score_vals,int popsize,int tour, int sector, int adjacent
 }
 
 
-int tournament_size(struct node *trees[], int is,int popsize,int tour)
+int tournament_size(Node *trees[], int is,int popsize,int tour)
 {
 /* tournament selection on size alone. returns index of chosen tree
 */
@@ -3108,7 +3108,7 @@ int tournament_size(struct node *trees[], int is,int popsize,int tour)
 
 
 
-int tournament_scsize(struct node *trees[],double *score_vals, int is,int popsize,int tour)
+int tournament_scsize(Node *trees[],double *score_vals, int is,int popsize,int tour)
 {
 /* tournament selection based on score and tree size
 */
@@ -3147,7 +3147,7 @@ int tournament_scsize(struct node *trees[],double *score_vals, int is,int popsiz
 
 
 
-int reverse_tour_size(struct node *trees[],double *score_vals, int is,int popsize,int tour)
+int reverse_tour_size(Node *trees[],double *score_vals, int is,int popsize,int tour)
 {
 /* tournament selection on size and score, seeking maximum values. Used for tree elimination in migration.
 */
@@ -3205,48 +3205,14 @@ int tournament(double *score_vals, int is,int popsize,int tour)
 
 int pick_random_neighbor(int i_tree, Point max_loc , int compgridsize)
 {
-/* Picks random neighbor */
+/* Picks random neighbor. Same as pick_random_neighbor_point, but with index i_tree instead of Point my_loc as arg. */
 
-  Point my_loc = i2point(i_tree, max_loc.x);
-  Point rnd_loc;
-
-  int x_m,y_m;
-
-  if (my_loc.x < 2*compgridsize)
-  {
-    x_m = 0;   
-  }
-  else if (my_loc.x > max_loc.x - 2*compgridsize)
-  {
-    x_m = max_loc.x - 2*compgridsize;
-  }
-  else  // an inner point
-  {
-    x_m = my_loc.x - compgridsize;
-  }
-
-  if (my_loc.y < 2*compgridsize)
-  {
-    y_m = 0;   
-  }
-  else if (my_loc.y > max_loc.y - 2*compgridsize)
-  {
-    y_m = max_loc.y - 2*compgridsize;
-  }
-  else  // an inner point
-  {
-    y_m = my_loc.y - compgridsize;
-  }
-
-  rnd_loc.x = x_m + rand()%(2*compgridsize);
-  rnd_loc.y = y_m + rand()%(2*compgridsize);
-
-  return point2i(rnd_loc, max_loc.x);
+  return pick_random_neighbor_point(i2point(i_tree, max_loc.x), max_loc , compgridsize);
 }
 
 int pick_random_neighbor_point(Point my_loc, Point max_loc , int compgridsize)
 {
-/* Picks random neighbor */
+/* Picks random neighbor. Same as pick_random_neighbor, but with Point my_loc as arg instead of index */
 
   Point rnd_loc;
 
@@ -3284,7 +3250,7 @@ int pick_random_neighbor_point(Point my_loc, Point max_loc , int compgridsize)
   return point2i(rnd_loc, max_loc.x);
 }
 
-int tournament_scsize2D(struct node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour)
+int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour)
 {
 /* tournament selection based on score and tree size
 */
@@ -3320,7 +3286,7 @@ int tournament_scsize2D(struct node *trees[],double *score_vals, Point my_loc,Po
   return kmin;
 }
 
-int reverse_tour_size2D(struct node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour)
+int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour)
 {
 /* tournament selection on size and score, seeking maximum values. Used for tree elimination in migration.
    selection takes place around Point my_loc
@@ -3487,7 +3453,7 @@ void  init_fixedforc(double *result, int result0, double *model,int model0)
 }
 
 
-void random_init(int popsize, struct node *trees1[], double* old_score_vals, double* ffs,double* result, double *obs, long* I, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init, int ts_factor, int startscore_i)
+void random_init(int popsize, Node *trees1[], double* old_score_vals, double* ffs,double* result, double *obs, long* I, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init, int ts_factor, int startscore_i)
 {
 #ifdef INTRODUCE_SPECIFIC_TREE
   int tries=0;
@@ -3496,7 +3462,7 @@ void random_init(int popsize, struct node *trees1[], double* old_score_vals, dou
   double error;
 //  char tmp_str[MAXTREESTR];
 
-  struct node *newtree;
+  Node *newtree;
 
   while (i<popsize)
   {        
@@ -3610,7 +3576,7 @@ void c_single_tree(double* ffs,double* result,double* obs, long* I, char treestr
   int i;
   char tmp_str[MAXTREESTR];
 
-  struct node *newtree;
+  Node *newtree;
   double aspect;
   double error;
   double S_init_array[SPACEDIM];
@@ -3651,13 +3617,13 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
 /*  fprintf(stderr,"Aspect: %f\n",model[0]);
 */
 
-  struct node *trees1[MAXTREES+5]; /* the old trees */
-  struct node *trees2[MAXTREES+5]; /* the new trees */
+  Node *trees1[MAXTREES+5]; /* the old trees */
+  Node *trees2[MAXTREES+5]; /* the new trees */
 
 /*
-  struct node *(*previousgen)[MAXTREES+5] = &trees1;
-  struct node *(*currentgen)[MAXTREES+5] = &trees2;
-  struct node *(*tmp_pointer)[]; 
+  Node *(*previousgen)[MAXTREES+5] = &trees1;
+  Node *(*currentgen)[MAXTREES+5] = &trees2;
+  Node *(*tmp_pointer)[]; 
 */
 
   int *current = make_int(0);
@@ -3695,10 +3661,10 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
   char repfile[FNAMESIZE];
   char elitefile[FNAMESIZE];
 
-  struct node *newtree;
-  struct node *tmptree1;
-  struct node *tmptree2;
-  struct node *tmptree3;
+  Node *newtree;
+  Node *tmptree1;
+  Node *tmptree2;
+  Node *tmptree3;
 
   int i_tree1, i_tree2, i_tree_old;
   double existing_score = -1; 
@@ -3828,7 +3794,7 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
     trees_reused=0;
 
     i=0;
-    while (i<popsize) /* fill trees2 and score_vals  */
+    while (i<popsize) /* fill trees2 and score_vals. i is only incremented once newtree is succesfully added to trees2, not discarded.  */
     {
       node_count = 0; /* count how many nodes are produced for newtree for cost function*/
 
