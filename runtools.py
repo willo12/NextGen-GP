@@ -17,7 +17,8 @@ import nextgen
 
 
 def load_config():
-  dir_path = os.path.dirname(os.path.realpath(__file__))
+  # get directory component of pathname using dirname (would get the file with basename)
+  dir_path = os.path.dirname(os.path.realpath(__file__)) # get the canonical path to current file (shortest absolute).
   config_name = 'config.ini'
   try:
     config = ConfigObj(config_name, configspec=os.path.join(dir_path,'configspec.ini'), file_error=True)
@@ -87,14 +88,6 @@ module load python/2.7.9
       os.system("qsub %s"%pbs_name)
     else:
       print "Wrote %s, no submit due to sublock"%pbs_name
-
-
-
-
-
-
-
-
 
 def landscape(max_x,max_y,sigma = 2):
   """
@@ -194,9 +187,6 @@ def prep_landscape():
 #result = np.polyval(model, np.arange(t0,dt,dt) ).astype(np.float64)
 
 
-
-
-
 def smoothGaussian(array,strippedXs=False,degree=5):  
 
   if degree==0:
@@ -236,7 +226,10 @@ def prep_run(config, SPACEDIM=2):
   """
 
   S_init = config['driver']['S_init']
- 
+  compgridsize = config['driver']['compgridsize']
+  mutationrate = config['driver']['mutationrate'] 
+  tour = config['driver']['tour'] 
+
   Iffs, obs,I, ts_factor, startscore_i = glacial(**(config['glacial'].dict()))
 
   # raise Exception('TEST: %s'%str(startscore_i))
@@ -253,17 +246,21 @@ def prep_run(config, SPACEDIM=2):
   model = np.zeros(3).astype(np.float64)
   model[0]=aspect
 
-  return Iffs, obs,I, ts_factor, startscore_i, S_init, obs, I, aspect, result, model, otime
+  return Iffs, obs,I, ts_factor, startscore_i, S_init, obs, I, aspect, result, model, otime, compgridsize, mutationrate, tour
 
 def batch_run(old_score_vals,score_vals, treefile,treeoutfile,my_number,qsubs,runlen,popsize,config=None,SPACEDIM=2):
+  """ Run the main GP loop.
 
+      Prepares data, reads config and calls netgen in c module. 
+
+  """
   if config is None:
     config = load_config()
 
-  Iffs, obs,I, ts_factor, startscore_i, S_init, obs, I, aspect, result, model, otime = prep_run(config,SPACEDIM)
+  Iffs, obs,I, ts_factor, startscore_i, S_init, obs, I, aspect, result, model, otime, compgridsize, mutationrate, tour = prep_run(config,SPACEDIM)
 
   # Start c code. This will read treefile and save tree file with filename treeoutfile
-  nextgen.nextgen(Iffs,result,old_score_vals,score_vals,obs,I, treefile,treeoutfile,my_number,qsubs,runlen,popsize,model,ts_factor,startscore_i, S_init)
+  nextgen.nextgen(Iffs,result,old_score_vals,score_vals,obs,I, treefile,treeoutfile,my_number,qsubs,runlen,popsize,model,ts_factor,startscore_i, S_init, compgridsize, mutationrate, tour)
 
 def stability_test(tree,config=None,SPACEDIM=2,ts_factor=[2,8]):
   """

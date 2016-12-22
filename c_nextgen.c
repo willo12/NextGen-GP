@@ -1,3 +1,10 @@
+/* NextGen Computational Core.
+
+  By Will Sijp.
+
+
+*/
+
 /* ISSUES: MAXTREESTR may be exceeded during runtime: need to account for this.
 One way is to calculate expected string length during tree construction?
 
@@ -15,43 +22,41 @@ One way is to calculate expected string length during tree construction?
 #include <time.h>
 
 /* MAXCHILD must be >= SPACEDIM */
-#define TANHONLY
-#define INTERP_FORCING
-#define HI_MUT_SPOT
+#define TANHONLY  // use tanh only for leaf member functions
+#define INTERP_FORCING  // interpolate forcing while solving
+#define HI_MUT_SPOT  // create a localized mutation hot spot
+//#define LOCALMUTHOTSPOT
 
-#define SPACEDIM 2
-#define COMPGRIDSIZE 10
+#define SPACEDIM 2   // spatial dimension of dynamical system
 #define RESPWINDOW 500
 #define MAXLEAF 25
 #define MAXSIZE 12
 #define HILLTHRESH 0.02
 #define INITNODES 1
-#define MAXHILL 8
+#define MAXHILL 8 // max hill climbing steps
 #define CONSTSCUTOFF 8
-#define MIGRATE 0.02
-#define TOUR 7
+#define MIGRATE 0.02 // proportion of population migrating 
 #define MIGTOUR 5
 #define RNDGRAIN 0.005
 #define MAXSEARCH 0
 #define MAXCONSTS 100
 #define MAXCHILD 3
-#define MAXPAR 10
-#define NUMPAR 7
-#define OPTABLE 26
-#define MAXTREESTR 10000
-#define TREEBUFFER 120000000
+#define MAXPAR 10 // max number of registers
+#define NUMPAR 7 // number of registers
+#define OPTABLE 26 // size optable
+#define MAXTREESTR 10000  // max size tree string
+#define TREEBUFFER 120000000 // tree array length
 #define ERRORMARG 0.1
 #define MIN_SCORE 40
 
-#define BLOWUP 10
+#define BLOWUP 2  // values for S_i beyond which the solution is considered unusable
 #define MAXCHANGE 0.1
-#define PARSIMONY 0.5
+#define PARSIMONY 0.5 // to calculate effect of tree size on score
 #define MAXDEPTH 4
 #define FPR 0.5
 #define PPR 0.6
 #define PNEW 0.02
 #define BREEDINGRATE 0.3
-#define MUTATIONRATE 0.08
 
 #define PEXP 0.9 
 #define PROBSWAP 0.9
@@ -115,15 +120,15 @@ void free_node(Node *t);
 
 
 double get_score(double* ffs,double* result, double *obs, long* I, Node *newtree, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init, int ts_factor, int startscore_i);
-int mutconsts(double *consts[],int size);
+int mutconsts(double *consts[],int size, double mutationrate);
 double hillclimb(double* ffs, double* result,double*  obs,long*  I,Node *newtree, int ffs0, int ffs1, int obs0, int obs1, double *consts[] , int size, double error, double aspect, double* S_init, int ts_factor, int startscore_i);
-int sectortour(double *score_vals,int popsize,int tour, int sector, int adjacent[]);
+int sectortour(double *score_vals,int popsize,int tour, int sector, int adjacent[]); // legacy for read_migrants_buffered. to be removed
 int tournament_size(Node *trees[], int is,int popsize,int tour);
 int tournament_scsize(Node *trees[],double *score_vals, int is,int popsize,int tour);
 int reverse_tour_size(Node *trees[],double *score_vals, int is,int popsize,int tour);
 int tournament(double *score_vals, int is,int popsize,int tour);
 int reversetour(double *score_vals,int is,int popsize,int tour);
-int * mapsector(int sector,int popsize);
+int * mapsector(int sector,int popsize); // legacy for read_migrants_buffered. to be removed
 void  init_fixedforc(double *result, int result0, double *model,int model0);
 int check_brackets(char *tmp_str);
 int check_node(Node *t);
@@ -131,8 +136,15 @@ int init_tables(void);
 void handle_S_init(double S_init, double* obs, int obs1, double* S_init_array);
 int min(int x, int y);
 int max(int x, int y);
-int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour);
-int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour);
+int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour, int compgridsize);
+int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour, int compgridsize);
+int migrants2buffer(Node *trees[],double *score_vals, int i_iofile ,Point max_loc, double* ffs,double* result, double *obs, long* I, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init_array,int ts_factor, int startscore_i, int migrants ,int compgridsize );
+int tournament2D(double *score_vals, Point my_loc, Point max_loc,int tour, int compgridsize);
+int reversetour2D(double *score_vals, int i_tree, Point max_loc,int tour, int compgridsize);
+int pick_random_neighbor(int i_tree, Point max_loc , int compgridsize);
+int pick_random_neighbor_point(Point my_loc, Point max_loc , int compgridsize);
+int readmigrants_buffered(const char *filepath, Node *trees[], double *score_vals, int low, int hi , int popsize, int compgridsize, int tour);
+
 
 static int arg_table[OPTABLE];
 
@@ -2388,7 +2400,7 @@ Point get_boundary(int i_iofile, int i, Point max_loc, int migrants)
 
 }
 
-int migrants2buffer(Node *trees[],double *score_vals, int i_iofile ,Point max_loc, double* ffs,double* result, double *obs, long* I, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init_array,int ts_factor, int startscore_i, int migrants  )
+int migrants2buffer(Node *trees[],double *score_vals, int i_iofile ,Point max_loc, double* ffs,double* result, double *obs, long* I, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init_array,int ts_factor, int startscore_i, int migrants ,int compgridsize )
 {
 /* creates output file with spatially ordered list of trees, depending on the direction of the output file.
 
@@ -2418,7 +2430,7 @@ int migrants2buffer(Node *trees[],double *score_vals, int i_iofile ,Point max_lo
   { // loop over all migrants to output
     boundary_loc = get_boundary(i_iofile, i, max_loc, migrants); 
   
-    k = tournament_scsize2D(trees,score_vals,boundary_loc,max_loc,MIGTOUR);
+    k = tournament_scsize2D(trees,score_vals,boundary_loc,max_loc,MIGTOUR, compgridsize);
 
 #ifdef CHECK_MIG_STABILITY
     /* check time step stability to export only stable trees */
@@ -2461,7 +2473,7 @@ int migrants2buffer(Node *trees[],double *score_vals, int i_iofile ,Point max_lo
 }
 
 
-int readmigrants(char * infiles[],int i_iofile, Node *trees[], double *score_vals, Point max_loc, int migrants )
+int readmigrants(char * infiles[],int i_iofile, Node *trees[], double *score_vals, Point max_loc, int migrants, int compgridsize, int tour )
 {
 /* fill an array of tree structure pointers by translating text tree representations to structures  
 
@@ -2517,7 +2529,7 @@ int readmigrants(char * infiles[],int i_iofile, Node *trees[], double *score_val
 
         // tournament replace trees in appropriate boundary
         // i_tour index of tree to be replaced by migrant
-        i_tour = reverse_tour_size2D(trees,score_vals,boundary_loc, max_loc, TOUR);
+        i_tour = reverse_tour_size2D(trees,score_vals,boundary_loc, max_loc, tour, compgridsize);
 
 
         free_node(trees[i_tour]); /* Note: free_node checks for NULL, no need to do it here */
@@ -2548,7 +2560,7 @@ int readmigrants(char * infiles[],int i_iofile, Node *trees[], double *score_val
 }
 
 
-int readmigrants_buffered(const char *filepath, Node *trees[], double *score_vals, int low, int hi , int popsize)
+int readmigrants_buffered(const char *filepath, Node *trees[], double *score_vals, int low, int hi , int popsize, int compgridsize, int tour)
 {
 /* fill an array of tree structure pointers by translating text tree representations to structures  
 
@@ -2616,11 +2628,11 @@ int readmigrants_buffered(const char *filepath, Node *trees[], double *score_val
 
         if (i%2==0)
         {
-          i_tour = reverse_tour_size(trees,score_vals,bound_low[0], bound_low[1]-bound_low[0], TOUR);
+          i_tour = reverse_tour_size(trees,score_vals,bound_low[0], bound_low[1]-bound_low[0], tour);
         }
         else
         {
-          i_tour = reverse_tour_size(trees,score_vals,bound_hi[0], bound_hi[1]-bound_hi[0], TOUR);
+          i_tour = reverse_tour_size(trees,score_vals,bound_hi[0], bound_hi[1]-bound_hi[0], tour);
         }
 
         fprintf(stderr,"i_tour %d \n",i_tour);
@@ -2929,7 +2941,7 @@ double get_score(double* ffs,double* result, double *obs, long* I, Node *newtree
   return 1e19;
 }
 
-int mutconsts(double *consts[],int size)
+int mutconsts(double *consts[],int size, double mutationrate)
 {
   int k, k2;
   double tmpval=0;
@@ -2937,7 +2949,7 @@ int mutconsts(double *consts[],int size)
   if (size>0)
   {
     tmpval=rand();
-    if ( tmpval<0.1*MUTATIONRATE*RAND_MAX )
+    if ( tmpval<0.1*mutationrate*RAND_MAX )
     {
       k2=rand()%size;
 
@@ -3205,14 +3217,18 @@ int tournament(double *score_vals, int is,int popsize,int tour)
 
 int pick_random_neighbor(int i_tree, Point max_loc , int compgridsize)
 {
-/* Picks random neighbor. Same as pick_random_neighbor_point, but with index i_tree instead of Point my_loc as arg. */
+/* Picks random neighbor. Used for dispersed tree computation grid.
+
+Same as pick_random_neighbor_point, but with index i_tree instead of Point my_loc as arg. */
 
   return pick_random_neighbor_point(i2point(i_tree, max_loc.x), max_loc , compgridsize);
 }
 
 int pick_random_neighbor_point(Point my_loc, Point max_loc , int compgridsize)
 {
-/* Picks random neighbor. Same as pick_random_neighbor, but with Point my_loc as arg instead of index */
+/* Picks random neighbor. Used for dispersed tree computation grid.
+
+Same as pick_random_neighbor, but with Point my_loc as arg instead of index */
 
   Point rnd_loc;
 
@@ -3250,7 +3266,7 @@ int pick_random_neighbor_point(Point my_loc, Point max_loc , int compgridsize)
   return point2i(rnd_loc, max_loc.x);
 }
 
-int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour)
+int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour, int compgridsize)
 {
 /* tournament selection based on score and tree size
 */
@@ -3266,7 +3282,7 @@ int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max
     l=0;
     do
     { /* look for a tree with leaves between 2 and MAXLEAF and try no more than 10 times */
-      k = pick_random_neighbor_point(my_loc, max_loc , COMPGRIDSIZE);
+      k = pick_random_neighbor_point(my_loc, max_loc , compgridsize);
       leafcount = conparcount(trees[k], current);
       *current = 0;  /* always reset leafcount current afterwards */
       l++;
@@ -3286,7 +3302,7 @@ int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max
   return kmin;
 }
 
-int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour)
+int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour, int compgridsize)
 {
 /* tournament selection on size and score, seeking maximum values. Used for tree elimination in migration.
    selection takes place around Point my_loc
@@ -3301,7 +3317,7 @@ int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max
 
   for (i=0;i<tour;i++)
   {
-    k = pick_random_neighbor_point(my_loc, max_loc , COMPGRIDSIZE);
+    k = pick_random_neighbor_point(my_loc, max_loc , compgridsize);
 
     leafcount = conparcount(trees[k], current); /* calculate number of consts and pars (leaves) */
     *current = 0;      /* always reset leafcount current afterwards */
@@ -3318,13 +3334,12 @@ int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max
   return kmax;
 }
 
-int tournament2D(double *score_vals, int i_tree, Point max_loc,int tour)
+int tournament2D(double *score_vals, Point my_loc, Point max_loc,int tour, int compgridsize)
 {
 /* tournament selection inside a neighborhood on a 2D grid
-  
-  COMPGRIDSIZE
-  for points i close to the left edge: left-most box is 0 to 2*COMPGRIDSIZE
-  for inner points i: i-COMPGRIDSIZE to i+COMPGRIDSIZE
+ 
+  for points i close to the left edge: left-most box is 0 to 2*compgridsize
+  for inner points i: i-compgridsize to i+compgridsize
 
 
   returns linear index i (to be used in score_vals and trees1)
@@ -3335,11 +3350,9 @@ int tournament2D(double *score_vals, int i_tree, Point max_loc,int tour)
   int kmin=0;
   double M=1e20;
 
-
   for (i=0;i<tour;i++)
   {
-
-    k = pick_random_neighbor(i_tree, max_loc , COMPGRIDSIZE);
+    k = pick_random_neighbor_point(my_loc, max_loc , compgridsize);
 
 //    k = is + rand()%popsize; /* choose population wide */
 
@@ -3352,13 +3365,12 @@ int tournament2D(double *score_vals, int i_tree, Point max_loc,int tour)
   return kmin;
 }
 
-int reversetour2D(double *score_vals, int i_tree, Point max_loc,int tour)
+int reversetour2D(double *score_vals, int i_tree, Point max_loc,int tour, int compgridsize)
 {
 /* tournament selection inside a neighborhood on a 2D grid
   
-  COMPGRIDSIZE
-  for points i close to the left edge: left-most box is 0 to 2*COMPGRIDSIZE
-  for inner points i: i-COMPGRIDSIZE to i+COMPGRIDSIZE
+  for points i close to the left edge: left-most box is 0 to 2*compgridsize
+  for inner points i: i-compgridsize to i+compgridsize
 
 
   returns linear index i (to be used in score_vals and trees1)
@@ -3373,7 +3385,7 @@ int reversetour2D(double *score_vals, int i_tree, Point max_loc,int tour)
   for (i=0;i<tour;i++)
   {
 
-    k = pick_random_neighbor(i_tree, max_loc , COMPGRIDSIZE);
+    k = pick_random_neighbor(i_tree, max_loc , compgridsize);
 
 //    k = is + rand()%popsize; /* choose population wide */
 
@@ -3611,7 +3623,7 @@ void c_single_tree(double* ffs,double* result,double* obs, long* I, char treestr
 
 
 
-void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score_vals,double* obs, long* I, char treefile[], char treeoutfile[], int ffs0, int ffs1, int result0,int my_number,int qsubs,int obs0,int obs1,int runlen,int popsize, double *model, int model0, int ts_factor, int startscore_i, double S_init)
+void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score_vals,double* obs, long* I, char treefile[], char treeoutfile[], int ffs0, int ffs1, int result0,int my_number,int qsubs,int obs0,int obs1,int runlen,int popsize, double *model, int model0, int ts_factor, int startscore_i, double S_init, int compgridsize, double mutationrate, int tour)
 {
 
 /*  fprintf(stderr,"Aspect: %f\n",model[0]);
@@ -3638,7 +3650,6 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
   double aspect;
   double avghill, avgsize, avgtreesreused;
   
-  double mutationrate = MUTATIONRATE; 
   double error, minerror, toterror,varerror;
   double *consts[MAXCONSTS];
 
@@ -3677,6 +3688,9 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
   gettimeofday(&time,NULL);
   srand((unsigned) getpid()+(time.tv_sec*100) + (time.tv_usec/100)  );
 */
+
+//  fprintf(stderr,"tour: %d ", tour);
+  
   once_flag = 0;
 
   aspect = model[0];
@@ -3703,7 +3717,7 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
   my_number_x = ((int) mod(my_number, qcols) );
 
 #ifdef HI_MUT_SPOT
-  // Create a small spot with increased mutation rate
+  // Create a small "hot spot" of 2x2 cores, with locally increased mutation rate
   if (  (qsubs > 16) &&   (my_number_y <= 1) && ( my_number_x <= 1)    ) 
   {
     mutationrate = 0.4;
@@ -3768,13 +3782,14 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
   outfiles[2] = outfile3;
   outfiles[3] = outfile4;
 
+  Point my_loc;
 
   for (run=0;run<runlen;run++)
   {
 
     for (j=0;j<4;j++) /* read migrant files */
     { 
-      error_flag = readmigrants(infiles ,j ,trees1,old_score_vals, max_loc, migrants); /* j arg is sector */
+      error_flag = readmigrants(infiles ,j ,trees1,old_score_vals, max_loc, migrants, compgridsize, tour); /* j arg is sector */
       if (error_flag == -1)
       {
         break;
@@ -3801,16 +3816,30 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
       existing_score = -1.0; 
       if ( rand() > PNEW*RAND_MAX)   
       {
+        my_loc = i2point(i, max_loc.x);
 
-        i_tree1 = tournament2D(old_score_vals, i, max_loc,TOUR);
-        i_tree2 = tournament2D(old_score_vals, i, max_loc,TOUR);
+        i_tree1 = tournament2D(old_score_vals, my_loc, max_loc,tour, compgridsize);
+        i_tree2 = tournament2D(old_score_vals, my_loc, max_loc,tour, compgridsize);
 
         tmptree1 = trees1[i_tree1];
         tmptree2 = trees1[i_tree2];
 
         tmptree3 = unifcross(tmptree1,tmptree2, PROBSWAP,1);
 
+#ifdef LOCALMUTHOTSPOT
+        if ((my_loc.x == 0) && (my_loc.y == 0))
+        {
+          newtree = allmut(tmptree3, 0.3); 
+        }
+        else
+        {
+          newtree = allmut(tmptree3, mutationrate); 
+        }
+#else
         newtree = allmut(tmptree3, mutationrate); 
+#endif
+
+
  //       fprintf(stderr,"%d",compare_trees(tmptree1,newtree));
 
         if (compare_trees(tmptree1,newtree) == 0)
@@ -3919,7 +3948,7 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
 
     for (j=0;j<4;j++) /* output migrants to adjacent processes to files. j represents xm,xp,ym,yp */
     {
-      migrants2buffer(trees2, score_vals, j, max_loc, ffs, result, obs, I, ffs0, ffs1, obs0,obs1,aspect, S_init_array, ts_factor, startscore_i, migrants);
+      migrants2buffer(trees2, score_vals, j, max_loc, ffs, result, obs, I, ffs0, ffs1, obs0,obs1,aspect, S_init_array, ts_factor, startscore_i, migrants, compgridsize);
       store_data(outfiles[j],treebuffer,"w"); /* write migrant tree files: xm,xp,ym,yp */
     }
   

@@ -23,7 +23,7 @@ cimport numpy as np
 
 cdef extern void c_map_f(char treestring[], double* A, double* B, int shape_i, int shape_j, double S0_start, double S1_start,double S0_end, double S1_end, double * forcing, int forcing_dim)
 
-cdef extern void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score_vals,double* obs, long* I, char treefile[], char treeoutfile[], int ffs0, int ffs1, int result0, int my_number,int qsubs,int obs0, int obs1,int runlen,int popsize,double* model,int model0, int ts_factor, int startscore_i, double S_init)
+cdef extern void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score_vals,double* obs, long* I, char treefile[], char treeoutfile[], int ffs0, int ffs1, int result0, int my_number,int qsubs,int obs0, int obs1,int runlen,int popsize,double* model,int model0, int ts_factor, int startscore_i, double S_init, int compgridsize, double mutationrate, int tour)
 
 cdef extern void c_single_tree(double* ffs,double* result,double* obs, long* I, char treestr[], int ffs0, int ffs1, int result0,int obs0, int obs1,double* model,int model0, int ts_factor, int startscore_i, double S_init)
 
@@ -51,7 +51,7 @@ def map_f(char * treestring, np.ndarray[double, ndim=2, mode="c"] A not None,np.
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-def nextgen(np.ndarray[double, ndim=2, mode="c"] ffs not None,np.ndarray[double, ndim=2, mode="c"] result not None,np.ndarray[double, ndim=1, mode="c"] old_score_vals not None,np.ndarray[double, ndim=1, mode="c"] score_vals not None,np.ndarray[double, ndim=2, mode="c"] obs not None,np.ndarray[long, ndim=1, mode="c"] I not None,char * treefile,char * treeoutfile, my_number, qsubs, runlen,popsize,np.ndarray[double, ndim=1, mode="c"] model not None, ts_factor=1, startscore_i=0, S_init=-1000):
+def nextgen(np.ndarray[double, ndim=2, mode="c"] ffs not None,np.ndarray[double, ndim=2, mode="c"] result not None,np.ndarray[double, ndim=1, mode="c"] old_score_vals not None,np.ndarray[double, ndim=1, mode="c"] score_vals not None,np.ndarray[double, ndim=2, mode="c"] obs not None,np.ndarray[long, ndim=1, mode="c"] I not None,char * treefile,char * treeoutfile, my_number, qsubs, runlen,popsize,np.ndarray[double, ndim=1, mode="c"] model not None, ts_factor=1, startscore_i=0, S_init=-1000, compgridsize = 10, mutationrate = 0.08, tour = 15):
  
   cdef int ffs0, ffs1, result0, score_vals0, obs0, I0
 
@@ -65,7 +65,7 @@ def nextgen(np.ndarray[double, ndim=2, mode="c"] ffs not None,np.ndarray[double,
   start_time = time.time()  
 #  profiler_start("yo.log")
 
-  c_nextgen(&ffs[0,0],&result[0,0],&old_score_vals[0],&score_vals[0],&obs[0,0],&I[0], treefile, treeoutfile, ffs0, ffs1,result0,my_number,qsubs,obs0,obs1,runlen,popsize,&model[0],model0, ts_factor, startscore_i, S_init)
+  c_nextgen(&ffs[0,0],&result[0,0],&old_score_vals[0],&score_vals[0],&obs[0,0],&I[0], treefile, treeoutfile, ffs0, ffs1,result0,my_number,qsubs,obs0,obs1,runlen,popsize,&model[0],model0, ts_factor, startscore_i, S_init, compgridsize, mutationrate, tour)
 
 #  profiler_stop()
   print "Time: %d"%(time.time() - start_time)
