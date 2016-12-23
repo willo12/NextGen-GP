@@ -8,10 +8,15 @@
 /* ISSUES: MAXTREESTR may be exceeded during runtime: need to account for this.
 One way is to calculate expected string length during tree construction?
 
+Trees inside one thread are defined on 2D grid.
+When EXPLICITMIG is selected, trees are also grouped inside internal grid cells of width and height $compgridsize.
+
+Tournament selection picks random trees from moving 2D rectangular window around current tree being created by crossing if EXPLICITMIG is not defined. If it is defined, tournament selection picks inside 2D cell enclosing current tree, and tree migration between internal cells takes place explicitly via exchange similar to migration between threads. 
+
 */
 
-//#define SPECIAL_MUL
-//#INTRODUCE_SPECIFIC_TREE
+//#define SPECIAL_MUL // multiplying with left multiplicant vector member functions acting as operators on the right member
+//#INTRODUCE_SPECIFIC_TREE  // inject a predefined 
 
 #include <unistd.h>
 #include <stdio.h>
@@ -21,11 +26,13 @@ One way is to calculate expected string length during tree construction?
 #include <math.h>
 #include <time.h>
 
-/* MAXCHILD must be >= SPACEDIM */
+/* MAXCHILD must be greater than or equal to SPACEDIM 
+*/
 #define TANHONLY  // use tanh only for leaf member functions
 #define INTERP_FORCING  // interpolate forcing while solving
 #define HI_MUT_SPOT  // create a localized mutation hot spot
 //#define LOCALMUTHOTSPOT
+#define EXPLICITMIG // exchange migrant trees explicitly between cells internal to CPU process
 
 #define SPACEDIM 2   // spatial dimension of dynamical system
 #define RESPWINDOW 500
@@ -35,7 +42,8 @@ One way is to calculate expected string length during tree construction?
 #define INITNODES 1
 #define MAXHILL 8 // max hill climbing steps
 #define CONSTSCUTOFF 8
-#define MIGRATE 0.02 // proportion of population migrating 
+#define MIGRATE 0.08 // proportion of population migrating 
+#define MIGRATE_INTERNAL 0.08 // proportion of population migrating internally 
 #define MIGTOUR 5
 #define RNDGRAIN 0.005
 #define MAXSEARCH 0
@@ -72,16 +80,23 @@ typedef struct point {
   int y;
 } Point;
 
+typedef struct rect {
+  Point min;
+  Point max;
+} Rect;
 
 struct fun {
   void * function;
   unsigned char argtypes[MAXCHILD];  
 };
 
+
 typedef struct node {
   int op;
   void * children[MAXCHILD];
 } Node;
+
+
 
 int numpar;
 double buffers[STACKSIZE][SPACEDIM];
@@ -144,7 +159,10 @@ int reversetour2D(double *score_vals, int i_tree, Point max_loc,int tour, int co
 int pick_random_neighbor(int i_tree, Point max_loc , int compgridsize);
 int pick_random_neighbor_point(Point my_loc, Point max_loc , int compgridsize);
 int readmigrants_buffered(const char *filepath, Node *trees[], double *score_vals, int low, int hi , int popsize, int compgridsize, int tour);
-
+int rnd_in_area_point(Point my_loc, Point max_loc , int compgridsize);
+int rnd_in_area(int i_tree, Point max_loc , int compgridsize);
+int does_tree_exist(Node *newtree,  Node *trees[], Point my_loc, Point max_loc, int compgridsize);
+Rect point2cell(Point my_loc, Point max_loc, int compgridsize);
 
 static int arg_table[OPTABLE];
 
@@ -1993,19 +2011,31 @@ int compare_trees(Node *t1, Node *t2)
 }
 
 
-int tree_in_old(Node *newtree,  Node *trees[], int popsize)
+
+
+int does_tree_exist(Node *newtree,  Node *trees[], Point my_loc, Point max_loc, int compgridsize)
 {
   // checks if tree is in array of trees. returns index if yes, -1 otherwise
+  // spiral around my_loc, scanning most likely locations first
 
-  int i;
 
-  for (i=0;i<popsize;i++)
-  {
-    if (compare_trees(newtree, trees[i]) == 0)
-    {
-      return i;
-    }
+  int i,j, i_tree;
+ 
+  Rect cell = point2cell(my_loc, max_loc, compgridsize);
 
+  for (i=cell.min.x;i<cell.max.x;i++)
+  {  
+    for (j=cell.min.y;j<cell.max.y;j++)
+    {  
+      my_loc.x = i; // reusing my_loc for different purpose
+      my_loc.y = j;
+
+      i_tree = point2i(my_loc, max_loc.x);
+      if (compare_trees(newtree, trees[i_tree]) == 0)
+      {
+        return i_tree;
+      }
+    } 
   }
 
   return -1;
@@ -2362,7 +2392,95 @@ int init_buffer(int popsize)
     free_node(yo);
   }  
   return 0;
+}
 
+
+int export_internal(Node *trees[],double *score_vals, Point my_loc, Point dest_loc, Point max_loc, int tour, int compgridsize, int migrants)
+{ /* export $migrants internal migrants from cell around Point my_loc to cell around Point dest_loc
+     identify pairs of indices into trees array for tree pointers to be swapped     
+
+     origin index determined via k = tournament_scsize2D(trees,score_vals,my_loc,max_loc,MIGTOUR, compgridsize)
+     destination index via i_tour = reverse_tour_size2D(trees,score_vals,dest_loc, max_loc, tour, compgridsize);
+
+
+*/
+
+  Node *tmptree_ptr; // temporary storage for tree swap
+
+  int i, i_orig, i_dest;
+
+  for (i=0;i<migrants;i++)
+  {
+
+    i_orig = tournament_scsize2D(trees,score_vals,my_loc,max_loc,MIGTOUR, compgridsize);
+    i_dest = reverse_tour_size2D(trees,score_vals,dest_loc, max_loc, tour, compgridsize);
+
+
+    tmptree_ptr = trees[i_orig];
+    trees[i_orig] = trees[i_dest];
+    trees[i_dest] = tmptree_ptr;
+  }
+
+  return 0;
+}
+
+int internal_migration(Node *trees[],double *score_vals, Point max_loc, int tour, int compgridsize, int migrants)
+{
+/* loop through all cells
+	for each cell
+		exports $migrants trees to neighboring cells
+
+*/
+
+  int i_cell, j_cell, max_i_cell, max_j_cell;
+  Point my_loc, dest_loc;
+
+// determine cells
+// determine what is a neighbor
+
+  max_i_cell = max_loc.x/compgridsize;
+  max_j_cell = max_loc.y/compgridsize;
+
+  for (j_cell=0;j_cell<max_j_cell;j_cell++)
+  {
+    for (i_cell=0;i_cell<max_i_cell;i_cell++)
+    {
+      // identify cell by upper left corner. Note: this creates some repeated calcs in tournament.
+      my_loc.x = i_cell*compgridsize; 
+      my_loc.y = j_cell*compgridsize;
+
+      if (i_cell>0) // do not export into the wall
+      { // export towards left neighbor
+        dest_loc.x = my_loc.x - 1;
+        dest_loc.y = my_loc.y;  
+        export_internal(trees,score_vals, my_loc, dest_loc, max_loc, tour, compgridsize,migrants); // export to one neighbor
+      }
+
+      if (i_cell<max_i_cell-1) // do not export into the wall
+      { // export towards right neighbor
+        dest_loc.x = my_loc.x + 1;
+        dest_loc.y = my_loc.y;  
+        export_internal(trees,score_vals, my_loc, dest_loc, max_loc, tour, compgridsize,migrants); // export to one neighbor
+      }
+
+
+      if (j_cell>0) // do not export into the wall
+      { // export towards upward neighbor
+        dest_loc.x = my_loc.x;
+        dest_loc.y = my_loc.y-1;  
+        export_internal(trees,score_vals, my_loc, dest_loc, max_loc, tour, compgridsize,migrants); // export to one neighbor
+      }
+
+      if (j_cell<max_j_cell-1) // do not export into the wall
+      { // export towards downward neighbor
+        dest_loc.x = my_loc.x;
+        dest_loc.y = my_loc.y+1;  
+        export_internal(trees,score_vals, my_loc, dest_loc, max_loc, tour, compgridsize,migrants); // export to one neighbor
+      }
+    }
+  }
+
+  return 0;
 }
 
 Point get_boundary(int i_iofile, int i, Point max_loc, int migrants)
@@ -3230,9 +3348,9 @@ int pick_random_neighbor_point(Point my_loc, Point max_loc , int compgridsize)
 
 Same as pick_random_neighbor, but with Point my_loc as arg instead of index */
 
-  Point rnd_loc;
+  Point rnd_loc; // point to return
 
-  int x_m,y_m;
+  int x_m,y_m; // minimum x, y
 
   if (my_loc.x < 2*compgridsize)
   {
@@ -3266,6 +3384,51 @@ Same as pick_random_neighbor, but with Point my_loc as arg instead of index */
   return point2i(rnd_loc, max_loc.x);
 }
 
+
+int rnd_in_area(int i_tree, Point max_loc , int compgridsize)
+{
+/* Picks random neighbor. Used for dispersed tree computation grid.
+
+Same as pick_random_neighbor_point, but with index i_tree instead of Point my_loc as arg. */
+
+  return rnd_in_area_point(i2point(i_tree, max_loc.x), max_loc , compgridsize);
+}
+
+
+Rect point2cell(Point my_loc, Point max_loc, int compgridsize)
+{ // find enclosing cell around point
+
+  Rect cell;
+
+  // upper left corner
+  cell.min.x = compgridsize*(my_loc.x/compgridsize);
+  cell.min.y = compgridsize*(my_loc.y/compgridsize);
+
+  // lower right corner of cell. Cutoff depending on max_loc in ambient grid
+  cell.max.x = min(cell.min.x + compgridsize,max_loc.x);
+  cell.max.y = min(cell.min.y + compgridsize,max_loc.y);
+
+  return cell;
+}
+
+int rnd_in_area_point(Point my_loc, Point max_loc , int compgridsize)
+{
+/* Determine which compgrid cell the point my_loc is in, and pick rnd point in area. Used for dispersed tree computation grid.
+
+   compgridsize: width of a compgrid cell
+
+  */
+
+  Point rnd_loc; // point to return
+  Rect cell = point2cell(my_loc, max_loc, compgridsize);
+
+  rnd_loc.x = cell.min.x + rand()%(cell.max.x - cell.min.x );
+  rnd_loc.y = cell.min.y + rand()%(cell.max.y - cell.min.y );
+
+  return point2i(rnd_loc, max_loc.x);
+}
+
+
 int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour, int compgridsize)
 {
 /* tournament selection based on score and tree size
@@ -3282,7 +3445,13 @@ int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max
     l=0;
     do
     { /* look for a tree with leaves between 2 and MAXLEAF and try no more than 10 times */
+
+#ifdef EXPLICITMIG
+      k = rnd_in_area_point(my_loc, max_loc , compgridsize);
+#else
       k = pick_random_neighbor_point(my_loc, max_loc , compgridsize);
+#endif
+
       leafcount = conparcount(trees[k], current);
       *current = 0;  /* always reset leafcount current afterwards */
       l++;
@@ -3317,7 +3486,11 @@ int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max
 
   for (i=0;i<tour;i++)
   {
+#ifdef EXPLICITMIG
+    k = rnd_in_area_point(my_loc, max_loc , compgridsize);
+#else
     k = pick_random_neighbor_point(my_loc, max_loc , compgridsize);
+#endif
 
     leafcount = conparcount(trees[k], current); /* calculate number of consts and pars (leaves) */
     *current = 0;      /* always reset leafcount current afterwards */
@@ -3352,7 +3525,12 @@ int tournament2D(double *score_vals, Point my_loc, Point max_loc,int tour, int c
 
   for (i=0;i<tour;i++)
   {
+
+#ifdef EXPLICITMIG
+    k = rnd_in_area_point(my_loc, max_loc , compgridsize);
+#else
     k = pick_random_neighbor_point(my_loc, max_loc , compgridsize);
+#endif
 
 //    k = is + rand()%popsize; /* choose population wide */
 
@@ -3385,7 +3563,11 @@ int reversetour2D(double *score_vals, int i_tree, Point max_loc,int tour, int co
   for (i=0;i<tour;i++)
   {
 
+#ifdef EXPLICITMIG
+    k = rnd_in_area(i_tree, max_loc , compgridsize);
+#else
     k = pick_random_neighbor(i_tree, max_loc , compgridsize);
+#endif
 
 //    k = is + rand()%popsize; /* choose population wide */
 
@@ -3782,12 +3964,12 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
   outfiles[2] = outfile3;
   outfiles[3] = outfile4;
 
-  Point my_loc;
+  Point my_loc; // to be used in internal grid
 
   for (run=0;run<runlen;run++)
   {
 
-    for (j=0;j<4;j++) /* read migrant files */
+    for (j=0;j<4;j++) /* Import trees from external processes. Read migrant files. */
     { 
       error_flag = readmigrants(infiles ,j ,trees1,old_score_vals, max_loc, migrants, compgridsize, tour); /* j arg is sector */
       if (error_flag == -1)
@@ -3849,7 +4031,7 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
         }
         else
         {
-          i_tree_old = tree_in_old(newtree,trees1, popsize);
+          i_tree_old = does_tree_exist(newtree,trees1, my_loc, max_loc, compgridsize);
           if (i_tree_old > -1)
           {
             existing_score = old_score_vals[i_tree_old];
@@ -3928,9 +4110,14 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
     }; /* end while loop on popsize */
 
 
-  /*
+  /* the next generation, trees2, is now ready
     copy score_vals to old_score_vals and copy trees2 to trees1 (to be improved later). 
   */
+
+#ifdef EXPLICITMIG
+    // exchange trees among neighboring cells internal to this CPU process.
+    internal_migration(trees2, score_vals, max_loc, tour, compgridsize, ((int) MIGRATE_INTERNAL*(compgridsize*compgridsize))/4  );
+#endif
 
     varerror=0;
     toterror = ((double) toterror/popsize);
