@@ -16,7 +16,6 @@ Tournament selection picks random trees from moving 2D rectangular window around
 */
 
 //#define SPECIAL_MUL // multiplying with left multiplicant vector member functions acting as operators on the right member
-//#INTRODUCE_SPECIFIC_TREE  // inject a predefined 
 
 #include <unistd.h>
 #include <stdio.h>
@@ -26,166 +25,111 @@ Tournament selection picks random trees from moving 2D rectangular window around
 #include <math.h>
 #include <time.h>
 
+#include <compile_options.h>
+#include <states.h>
+#include <node_structures.h>
+#include <fields.h>
+#include <basic_ops.h>
+#include <my_ops.h>
+#include <tree_io.h>
+#include <model.h>
+#include <c_nextgen.h>
+
+
 /* MAXCHILD must be greater than or equal to SPACEDIM 
 */
-#define TANHONLY  // use tanh only for leaf member functions
-#define INTERP_FORCING  // interpolate forcing while solving
-#define HI_MUT_SPOT  // create a localized mutation hot spot
-//#define LOCALMUTHOTSPOT
-#define EXPLICITMIG // exchange migrant trees explicitly between cells internal to CPU process
 
-#define SPACEDIM 2   // spatial dimension of dynamical system
-#define RESPWINDOW 500
+// local preprocessor directives
+
 #define MAXLEAF 25
 #define MAXSIZE 12
-#define HILLTHRESH 0.02
 #define INITNODES 1
-#define MAXHILL 8 // max hill climbing steps
 #define CONSTSCUTOFF 8
 #define MIGRATE 0.08 // proportion of population migrating 
 #define MIGRATE_INTERNAL 0.08 // proportion of population migrating internally 
 #define MIGTOUR 5
-#define RNDGRAIN 0.005
-#define MAXSEARCH 0
-#define MAXCONSTS 100
-#define MAXCHILD 3
-#define MAXPAR 10 // max number of registers
-#define NUMPAR 7 // number of registers
-#define OPTABLE 26 // size optable
-#define MAXTREESTR 10000  // max size tree string
-#define TREEBUFFER 120000000 // tree array length
-#define ERRORMARG 0.1
-#define MIN_SCORE 40
+//#define EXPLICITMIG // exchange migrant trees explicitly between cells internal to CPU process
 
-#define BLOWUP 2  // values for S_i beyond which the solution is considered unusable
-#define MAXCHANGE 0.1
-#define PARSIMONY 0.5 // to calculate effect of tree size on score
+#define MIN_SCORE -1
+#define MIGPARSFACT 3 // amplification of parsimony in assessing score migrants
 #define MAXDEPTH 4
 #define FPR 0.5
 #define PPR 0.6
 #define PNEW 0.02
-#define BREEDINGRATE 0.3
-
-#define PEXP 0.9 
 #define PROBSWAP 0.9
-
-#define PULSETIME 10000
 #define MAXTREES 400000
-
 #define FNAMESIZE 100
-#define STACKSIZE 2000
 
-typedef struct point {
-  int x;
-  int y;
-} Point;
+// local vars
 
-typedef struct rect {
-  Point min;
-  Point max;
-} Rect;
+typedef struct migr {
 
-struct fun {
-  void * function;
-  unsigned char argtypes[MAXCHILD];  
-};
+  char* infiles;
+  char* outfiles;
 
-
-typedef struct node {
-  int op;
-  void * children[MAXCHILD];
-} Node;
+} Migr;
 
 
 
-int numpar;
-double buffers[STACKSIZE][SPACEDIM];
 
-Node *talloc(void);
-int *make_int(int);
-double *make_double(double);
+// local function definitions
 
-void interp_node(Node *tree, int i_tofill);
-char* node2str(Node *tree, char trstr[]);
+int mod (int a, int b);
+char find_right_bracket(char left_bracket);
 
-char* instrsetnodes = "QEOTLASMIV"; /* for printing */
-char* instrset = "ASM"; /* used at runtime */
-char* instrsetswap = "ASM"; /* instr that can swap */
-char* instrsetzero = "T"; /* function subleaf nodes */
-/* char* instrsetzero = "QEOTL";  */
+Point make_point(int x, int y);
+int point2i(Point p, int max_x);
+Point calc_max_p(int max_i);
 
-double reg[MAXPAR];
+Node* node_from_str_lit(char tree_str[]);
+int test_tree_io(void);
 
-double accum, xreg;
+Node *pick_F(Node *t, int max_i);
+int export_internal(Population pop, Point my_loc, Point dest_loc, int tour, int compgridsize, int migrants);
+int internal_migration(Population pop, int tour, int compgridsize, int migrants);
+Point get_boundary(int i_iofile, int i, Point max_loc, int migrants);
+IntPars str2int_pars(char * text);
+int int_pars2bufferline(NodeScore ns, char treebuffer[], IntPars ip );
+int NodeScore2bufferline(NodeScore ns, char treebuffer[] );
+int migrants2buffer(Population pop, int i_iofile , int migrants ,int compgridsize, Experiment Exp, Point my_loc_external );
+int numbers_dot_only(const char *s);
 
-double * fixedforc;
-double * fixedforc2;
-double * emph;
+int readmigrants(Migr mig,int i_iofile, Population pop, int migrants, int compgridsize, int tour );
+int pop2buffer(Population pop);
+int buffer2trees(Node *trees[]);
 
-char treebuffer[TREEBUFFER];
-
-char treestr1[MAXTREESTR];
-char treestr2[MAXTREESTR];
-
-char* (*code2str_table[OPTABLE])(Node *tree, char trstr[]);
-void (*op_table[OPTABLE])(Node *, int);
-
-Node *copy_node(Node *tree);
-void free_node(Node *t);
-
-
-double get_score(double* ffs,double* result, double *obs, long* I, Node *newtree, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init, int ts_factor, int startscore_i);
-int mutconsts(double *consts[],int size, double mutationrate);
-double hillclimb(double* ffs, double* result,double*  obs,long*  I,Node *newtree, int ffs0, int ffs1, int obs0, int obs1, double *consts[] , int size, double error, double aspect, double* S_init, int ts_factor, int startscore_i);
-int sectortour(double *score_vals,int popsize,int tour, int sector, int adjacent[]); // legacy for read_migrants_buffered. to be removed
-int tournament_size(Node *trees[], int is,int popsize,int tour);
-int tournament_scsize(Node *trees[],double *score_vals, int is,int popsize,int tour);
-int reverse_tour_size(Node *trees[],double *score_vals, int is,int popsize,int tour);
-int tournament(double *score_vals, int is,int popsize,int tour);
-int reversetour(double *score_vals,int is,int popsize,int tour);
-int * mapsector(int sector,int popsize); // legacy for read_migrants_buffered. to be removed
-void  init_fixedforc(double *result, int result0, double *model,int model0);
-int check_brackets(char *tmp_str);
-int check_node(Node *t);
-int init_tables(void);
-void handle_S_init(double S_init, double* obs, int obs1, double* S_init_array);
-int min(int x, int y);
-int max(int x, int y);
-int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour, int compgridsize);
-int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour, int compgridsize);
-int migrants2buffer(Node *trees[],double *score_vals, int i_iofile ,Point max_loc, double* ffs,double* result, double *obs, long* I, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init_array,int ts_factor, int startscore_i, int migrants ,int compgridsize );
-int tournament2D(double *score_vals, Point my_loc, Point max_loc,int tour, int compgridsize);
-int reversetour2D(double *score_vals, int i_tree, Point max_loc,int tour, int compgridsize);
+int read_pop(char *filepath,Population pop);
+int tournament_size(Population pop, int is,int tour);
+int tournament_scsize(Population pop, int is,int tour);
+int reverse_tour_size(Population pop, int is,int tour);
+int tournament(Population pop, int is,int tour);
 int pick_random_neighbor(int i_tree, Point max_loc , int compgridsize);
 int pick_random_neighbor_point(Point my_loc, Point max_loc , int compgridsize);
-int readmigrants_buffered(const char *filepath, Node *trees[], double *score_vals, int low, int hi , int popsize, int compgridsize, int tour);
-int rnd_in_area_point(Point my_loc, Point max_loc , int compgridsize);
 int rnd_in_area(int i_tree, Point max_loc , int compgridsize);
-int does_tree_exist(Node *newtree,  Node *trees[], Point my_loc, Point max_loc, int compgridsize);
 Rect point2cell(Point my_loc, Point max_loc, int compgridsize);
+int rnd_in_area_point(Point my_loc, Point max_loc , int compgridsize);
+int tournament_scsize2D(Population pop, Point my_loc,int tour, int compgridsize);
+int tournament_size2D(Population pop, Point my_loc,int tour, int compgridsize);
+int reverse_tour_scsize2D(Population pop, Point my_loc,int tour, int compgridsize);
+int reverse_tour_size2D(Population pop, Point my_loc,int tour, int compgridsize);
+int tournament2D(Population pop, Point my_loc,int tour, int compgridsize);
+int reversetour2D(Population pop, int i_tree,int tour, int compgridsize);
+int reversetour(Population pop,int is,int tour);
+void random_init(Population pop,  Experiment Exp);
+Population copy_pop(Population pop, Population pop_next);
+Population make_pop(int popsize);
+Migr make_migr(void);
+Migr init_mig_files(Point p, Point max_p);
 
-static int arg_table[OPTABLE];
 
-const char* delims = "\n";
+// global vars
 
-const char delim = ':';
-
+//int nhillsearches=0;
 int node_count = 0;
 
-int once_flag=0;
 
-int nhillsearches=0;
 
-FILE *fp;
-
-/*
-
-To create a const node:
-node op is 'C'
-first child points to a value
-
-*/
-
+// functions
 
 int mod (int a, int b)
 {
@@ -199,7 +143,23 @@ int mod (int a, int b)
 
 }
 
-void split(char text[],int *I)
+char find_right_bracket(char left_bracket)
+{
+
+  if (left_bracket == '(')
+  {
+    return left_bracket + 1;
+  }
+  else
+  {
+    return left_bracket + 2;
+  }  
+}
+
+
+
+
+void split(char text[],int *I, char left_bracket, char delim)
 {
 /* 
 split string on ',' except for comma's within bracketed parts.
@@ -218,16 +178,17 @@ becomes
   int cursor=0;
   int icomma=0;
 
+  char right_bracket = find_right_bracket(left_bracket);
   
   while (*(text+cursor) !='\0')
   {
 
-    if (*(text+cursor)=='(')
+    if (*(text+cursor)==left_bracket)
       counter += 1;
-    else if (*(text+cursor)==')')
+    else if (*(text+cursor)==right_bracket)
       counter -= 1;
 
-    if (*(text+cursor)==',' && counter==0)
+    if (*(text+cursor)==delim && counter==0)
     {
       
       text[cursor]='\0';
@@ -253,6 +214,16 @@ int max(int x, int y)
 {
   return x ^ ((x ^ y) & -(x < y)); 
 }
+
+Point make_point(int x, int y)
+{
+  Point p;
+  p.x = x;
+  p.y = y;
+
+  return p;
+}
+
 
 Point i2point(int i, int max_x)
 {
@@ -290,115 +261,6 @@ Point calc_max_p(int max_i)
 }
 
 
-
-Node *copy_node(Node *tree)
-{
-  Node *newnode=talloc();
-  newnode->op = tree->op;
-
-  /* C and P are special as their children are non-standard nodes */
-  if (tree->op == 'C'-'A')
-  {
-    newnode->children[0] = make_double(*((double *) tree->children[0]));
-
-  }
-  else if (tree->op == 'P'-'A')
-  {
-    newnode->children[0] = make_int(*((int *) tree->children[0]));
-  }
-  else
-  { /* copy children. copies no children in case of zero-child nodes */
-    int i;
-    for (i=0;i<arg_table[tree->op];i++)
-    {
-      newnode->children[i] = copy_node(tree->children[i]);
-    };
-  };
-
-  return newnode;
-};
-
-
-Node *str2node(char text[])
-{
-
-  /* recursively fill node from text containing tree in bracket notation */
-
-  int l,i;
-  int I[4];
-
-  if (text[0] == '*')
-  {
-    return NULL;
-  }
-
-  Node *newnode=talloc();
-  
-  if (text[0] == '(') /* this is not a leaf node */
-  {
-    l=strlen(text);
-    newnode->op=text[l-1]-'A';  /* found op. op code is relative to 'A' */
-
-/* trim */
-    text[l-2]='\0'; /* remove trailing op and ) bracket */
-    text = text+1; /* remove beginning ( bracket */
-
-/* split string on ',' except for comma's within bracketed parts.
-split is achieved by replacing those ',' with \0 and maintaining
-indices into string in I, indicating where the pieces start. */
-    split(text,I);
-
-    /* fill children of newnode, using str2node recursively */
-    newnode->children[0] = str2node(text);    /* first child at start of string (\0 have now been inserted) */
-
-    /* collect remaining children */
-    i=0;
-    while (I[i] !=0)
-    {
-      newnode->children[i+1] = str2node(text+I[i]);    
-      i++;
-    }
-  }    
-  else /* this is a sub-leaf node (identified by not having a bracket) */
-  {
-    if (text[0]=='p') /* it's a parameter */
-    {
-      newnode->op='P'-'A'; 
-      newnode->children[0]=make_int(atoi(text+1));
-    }
-    else if ( isdigit(text[0]) || (text[0]=='-') )
-    {
-      newnode->op='C'-'A'; /* it's a  constant */
-      newnode->children[0]=make_double(atof(text));
-    }
-    else
-    {
-      newnode->op=text[0]-'A'; /* it's a sub-leaf function, no children */
-    }
-  }
-  return newnode;
-}
-
-
-Node *talloc(void)
-{
-  Node *newtree =  (Node *) calloc(1,sizeof(Node));
-  if (newtree == NULL)
-  {
-    fprintf(stderr,"Error: cannot calloc newtree in talloc.\n");
-    exit(0);
-  }
-
-  int i;
-  for (i=0;i<MAXCHILD;i++)
-  {
-    newtree->children[i]=NULL;
-  }
-
-  node_count++;
-  return newtree;
-};
-
 int *make_int(int value)
 {
 /*
@@ -409,7 +271,7 @@ int *make_int(int value)
   if (ptr == NULL)
   {
     fprintf(stderr,"Error: cannot malloc new int in make_int.\n");
-    exit(0);
+    exit(-1);
   }
 
   *ptr=value;
@@ -427,484 +289,230 @@ double *make_double(double value)
   if (ptr == NULL)
   {
     fprintf(stderr,"Error: cannot malloc new double in make_double.\n");
-    exit(0);
+    exit(-1);
   }
 
   *ptr=value;
   return ptr;
 };
 
-/* Functions ending in Chr print node to string. Used in code2str_table. 
-   Names correspond to node names.
-*/
 
-char* nopChr(Node *tree, char trstr[])
+
+int free_int_pars(IntPars ip)
 {
-  return trstr;
-};
+  free(ip.data);
+  ip.data = NULL;
 
-char* constChr(Node *tree, char trstr[])
-{
-/* convert tree to str where tree is a constant leaf */
-  sprintf(trstr,"%g",*((double *) tree->children[0]));
-
-  return trstr; 
-};
-
-
-char* parChr(Node *tree, char trstr[])
-{
-/* convert tree to str where tree is a par leaf */
-
-  sprintf(trstr,"p%d",*((int *) tree->children[0]));
-
-  return trstr; 
-};
-
-
-
-
-
-/*
-  The following four functions print functions taking 0,1,2 and 3 argument nodes.
-*/
-
-char* zeroFunChr(Node *tree, char trstr[])
-{
-/* convert tree to str recursively, where root node is an op that takes 0 arguments */
-
-  sprintf(trstr,"%c", tree->op+'A'); /* print Q etc to trstr */
-
-  return trstr;
-
-};
-
-char* oneFunChr(Node *tree, char trstr[])
-{
-/* convert tree to str recursively, where root node is an op that takes 1 argument */
-
-  char tmp_str[MAXTREESTR];
-
-  /* insert tmp_str between brackets, e.g. ()M */
-  strcpy(trstr,"(");  
-
-/* code2str_table table linking op codes to function pointers, functions convert node to str in brack notation.
-   code2str_table points to oneFunChr (this function), etc and leaf chr function parChr, constChr 
-   for example, ((p1)Q)Q would call oneFunChr again on (p1)Q and yield (result)Q, where result is obtained by oneFunChr calling parChr on p1 and enclosing it in ()Q.
-
-*/
-
-/*   apply code2str_table[op] to children and put result in tmp_str */
-  (*code2str_table[((Node *) tree->children[0])->op])( ((Node *) tree->children[0]),tmp_str );
-  
-  strcat(trstr,  tmp_str   );  /* append tmp_str to trstr */
-  sprintf(tmp_str,")%c", tree->op+'A'); /* print )M or )A etc to tmp_str */
-  strcat(trstr, tmp_str); 
-
-  return trstr;
-
-};
-
-/* new generalized 2,3,..FunChr to be used later */
-char* nFunChr(Node *tree, char trstr[], int n)
-{
-/* convert tree to str recursively, where root node is an op that takes n arguments */
- 
-  int i;
-  char tmp_str[MAXTREESTR];
-  strcpy(trstr,"(");
-
-  for (i=0;i<n;i++){  
-    (*code2str_table[((Node *) tree->children[0])->op])( ((Node *) tree->children[0]),tmp_str );
-  strcat(trstr,tmp_str);
-    if (i<n-1) /* join on , delimiter */
-    {
-      strcat(trstr,",");
-    }
-  } 
-
-
-  sprintf(tmp_str,")%c", tree->op+'A');
-  strcat(trstr, tmp_str);
-
-  return trstr;
-
-};
-
-char* twoFunChr(Node *tree, char trstr[])
-{
-/* convert tree to str recursively, where root node is an op that takes 2 arguments */
-  char tmp_str[MAXTREESTR];
-  strcpy(trstr,"(");
-  
-  (*code2str_table[((Node *) tree->children[0])->op])( ((Node *) tree->children[0]),tmp_str );
-  strcat(trstr,tmp_str);
-  strcat(trstr,",");
-  (*code2str_table[((Node *) tree->children[1])->op])( ((Node *) tree->children[1]),tmp_str );
-  strcat(trstr,tmp_str);  
-  sprintf(tmp_str,")%c", tree->op+'A');
-  strcat(trstr, tmp_str);
-
-  return trstr;
-
-};
-
-
-char* threeFunChr(Node *tree, char trstr[])
-{
-/* convert tree to str recursively, where root node is an op that takes 3 arguments */
-  char tmp_str[MAXTREESTR];
-  strcpy(trstr,"(");  
-  (*code2str_table[((Node *) tree->children[0])->op])( ((Node *) tree->children[0]),tmp_str );
-  strcat(trstr,tmp_str);
-  strcat(trstr,",");
-  (*code2str_table[((Node *) tree->children[1])->op])( ((Node *) tree->children[1]),tmp_str );
-  strcat(trstr,tmp_str);    
-  strcat(trstr,",");
-  (*code2str_table[((Node *) tree->children[2])->op])( ((Node *) tree->children[2]),tmp_str );
-  strcat(trstr,tmp_str);    
-  sprintf(tmp_str,")%c", tree->op+'A');
-  strcat(trstr, tmp_str);
-
-  return trstr;
-};
-
-/* The following functions are called from the table of operations to execute nodes recursively */
-
-
-double constFun(Node *tree)
-{
-/* Yield a constant leaf. Triggered by op code 'C' */
-  return *((double *) tree->children[0]); 
-
-};
-
-void nopFun(Node *tree, int i_tofill)
-{
-/* no operation function to initialize op_table */
-
-};
-
-
-double parFun(Node *tree)
-{
-/* Yield a parameter leaf. Triggered by op code 'D' */
-  return reg[*((int *) tree->children[0])];
-};
-
-double zeroFun(Node *tree, int i, double input)
-{
-/* subleaf functions. Apply scalar function. Triggered by subleaf op codes e.g. 'Q' 
-   int i: determines what input to use for the scalar function: >-1 signals reg[i], -1 signals input argument.
-
-   Unlike branch (above-leaf) functions, which deposit in the buffer, this function returns its value.
-
-*/
-
-  if (i>-1)
-  {
-
-    input = reg[i];
-  
-  }
-
-  if (tree->op=='T'-'A')
-  {
-    return tanh(input);
-  }
-  else if (tree->op=='E'-'A')
-  {
-    return exp(input);
-  }
-  else if (tree->op=='O'-'A')
-  {
-    return 1.0/input;
-  }
-  else if (tree->op=='Q'-'A')
-  {
- 
-    return sqrt(input);
-
-  }
-  else if (tree->op=='L'-'A')
-  {
-    return log(input);
-  }
-
-  else
-  {
-    return 0;
-  }
-};
-
-double zeroFunInput(Node *tree, double input)
-{
-/* subleaf functions. Apply scalar function to input argument. Triggered by subleaf op codes e.g. 'Q' 
-
-*/
-
-
-  if (tree->op=='T'-'A')
-  {
-    return tanh(input);
-  }
-  else if (tree->op=='E'-'A')
-  {
-    return exp(input);
-  }
-  else if (tree->op=='O'-'A')
-  {
-    return 1.0/input;
-  }
-  else if (tree->op=='Q'-'A')
-  {
- 
-    return sqrt(input);
-
-  }
-  else if (tree->op=='L'-'A')
-  {
-    return log(input);
-  }
-
-  else
-  {
-    return 0;
-  }
-};
-
-
-double zeroFunReg(Node *tree, int i)
-{
-/* subleaf functions. Apply scalar function. Triggered by subleaf op codes e.g. 'Q' 
-   use reg[i] as input
-
-*/
-
-
-  if (tree->op=='T'-'A')
-  {
-    return tanh(reg[i]);
-  }
-  else if (tree->op=='E'-'A')
-  {
-    return exp(reg[i]);
-  }
-  else if (tree->op=='O'-'A')
-  {
-    return 1.0/reg[i];
-  }
-  else if (tree->op=='Q'-'A')
-  {
- 
-    return sqrt(reg[i]);
-
-  }
-  else if (tree->op=='L'-'A')
-  {
-    return log(reg[i]);
-  }
-
-  else
-  {
-    return 0;
-  }
-};
-
-
-
-
-
-// Jump functions
-
-void leafFun(Node *tree, int i_tofill)
-{
-/* Represents vector of parameters and constants.
-
-   Calling it fills buffers[i_tofill][:] with constant values and current values of parameters.
-
-   leaf nodes have SPACEDIM amount of (sub-leaf) children.
-*/
-
-  int i;  
-
-  for (i=0;i<SPACEDIM;i++)
-  { /* interpret child nodes (vector components) here locally instead of via op_table */
-    if ( ((Node *) tree->children[i])->op == 'C'-'A')
-    {
-      buffers[i_tofill][i] = *((double *) ((Node *) tree->children[i])->children[0]);
-    }
-    else if ( ((Node *) tree->children[i])->op == 'P'-'A')
-    {
-      buffers[i_tofill][i] = reg[*((int *) ((Node *) tree->children[i])->children[0])];
-
-                            
-    }
-    else
-    {
-#ifdef TANHONLY
-      buffers[i_tofill][i] = tanh(reg[i]);
-#else
-      buffers[i_tofill][i] = zeroFunReg(tree->children[i], i);
-#endif
-
-    }
-  }
+  return 0;
 }
 
-void addFun(Node *tree, int i_tofill)
+
+int free_node_score(NodeScore ns)
 {
-  /* execute addition node: add the values of the two child nodes. */
-
-  /* double buffers[4][SPACEDIM] */
-
-  int i;  
-  (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
-  (*op_table[(  (Node *) tree->children[1])->op])(((Node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
-
-  for (i=0;i<SPACEDIM;i++)
-  {
-    buffers[i_tofill][i] = buffers[i_tofill+1][i] + buffers[i_tofill+2][i];
-  }
-
-};
-
-void subFun(Node *tree, int i_tofill)
-{
-  /* execute subtraction node: subtract the values of the two child nodes. */
-
-  int i;  
-  (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
-  (*op_table[(  (Node *) tree->children[1])->op])(((Node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
-
-  for (i=0;i<SPACEDIM;i++)
-  {
-    buffers[i_tofill][i] = buffers[i_tofill+1][i] - buffers[i_tofill+2][i];
-  }
-
-};
-
-void mulFun(Node *tree, int i_tofill)
-{
-  /* execute multiplication node: multiply the values of the two child nodes. If left node is a function, apply that function to right multiplicant */
-
-#ifdef SPECIAL_MUL
-  Node *child;
+  free_node(ns.node);
+#ifdef EVOLVEIC
+  free_state(ns.S_i);
 #endif
-  int i; 
 
-#ifdef SPECIAL_MUL
-  if ( ((Node *) tree->children[0])->op == 'V'-'A' ) /* left multiplicant is a vector V: look at each of its components */
-  { 
+#if INTPARS > 0
+  free_int_pars(ns.ip);
+#endif
 
-    /* interpret right multiplicant, and then decide how left multiplicant acts on resulting buffer values for each component */
-    (*op_table[(  (Node *) tree->children[1])->op])(((Node *) tree->children[1]),i_tofill+1); /* fills buffer i_tofill+1 */
+  return 0;
+}
 
-    for (i=0;i<SPACEDIM;i++)
-    { /* get children of left multiplicant */
-      child = ((Node *) ((Node *) tree->children[0])->children[i]);
-      if ( child->op == 'C'-'A')
-      {
-        buffers[i_tofill][i] = (*((double *) child->children[0]))*buffers[i_tofill+1][i];  /* left multiplicant is a constant */
-      }
-      else if ( child->op == 'P'-'A')
-      {
-        buffers[i_tofill][i] = reg[*((int *) child->children[0])]*buffers[i_tofill+1][i]; /* it's a parameter node */
-      }
-      else
-      {
+int free_pop(Population pop)
+{
 
-#ifdef TANHONLY
-        buffers[i_tofill][i] = tanh(buffers[i_tofill+1][i]);
+  int j;
+
+  for (j=0; j < pop.popsize; j++)
+  {
+    free_node_score(pop.pop[j]);
+  }
+
+  free(pop.pop);
+
+  return 0;
+}
+
+
+
+
+
+IntPars make_int_pars(int size)
+{
+  IntPars ip;
+
+  ip.data = (int *)malloc(sizeof(int)*size);
+
+  return ip;
+}
+
+
+
+
+
+
+
+NodeScore make_node_score(int size)
+{
+
+  NodeScore ns;
+
+  ns.score = 1e19;
+  ns.node = talloc();
+#ifdef EVOLVEIC
+  ns.S_i = make_state(size);
+#endif
+
+#if INTPARS > 0
+  ns.ip = make_int_pars(INTPARS);
+#endif 
+
+  return ns;
+}
+
+
+NodeScore copy_node_score(NodeScore ns)
+{
+
+  NodeScore new_ns;
+
+  new_ns.score = ns.score;
+  new_ns.node = copy_node(ns.node);
+#ifdef EVOLVEIC
+  new_ns.S_i = make_state(ns.S_i.size);
+#endif
+
+#if INTPARS > 0
+  new_ns.ip = make_int_pars(INTPARS);
+#endif 
+
+  return new_ns;
+
+}
+
+
+int check_numpar(int numpar)
+{
+  if (numpar > MAXPAR)
+  {
+    fprintf(stderr,"Warning! Number of variables numpar=%d, with SPACEDIM=%d, exceeds MAXPAR=%d \n",numpar,SPACEDIM,MAXPAR);
+    return 1;
+  }
+
+  return 0;
+}
+
+
+
+
+
+
+
+int is_null_node(Node *tree)
+{ /* check if this is a non-initialized Node */
+
+  int i;
+  for (i=0;i<MAXCHILD;i++)
+  {
+    if ( (Node *)  (tree->children[i]) != NULL)
+    {
+      return 1;
+    }
+
+  }
+  return 0;
+
+}
+
+
+Node *talloc(void)
+{
+  Node *newtree =  (Node *) calloc(1,sizeof(Node));
+  if (newtree == NULL)
+  {
+    fprintf(stderr,"Error: cannot calloc newtree in talloc.\n");
+    exit(-1);
+  }
+
+  int i;
+  for (i=0;i<MAXCHILD;i++)
+  {
+    newtree->children[i]=NULL;
+  }
+
+  node_count++;
+  return newtree;
+};
+
+
+int make_test_tree(char test_tree_str[])
+{
+  char tmp_str[MAXTREESTR];
+  Node *player;
+ 
+  State S_result = make_state(SPACEDIM);
+
+  sprintf(tmp_str, "%s",test_tree_str  );  
+  player = str2node(tmp_str,'(',',');
+
+  (*code2str_table[(int) player->op])(player,tmp_str);
+
+  evaluate_tree(player, S_result);
+
+#ifdef INTSTATES
+  fprintf(stderr,"%s %d\n",tmp_str, S_result.data[0]);
+#else
+  fprintf(stderr,"%s %g\n",tmp_str, S_result.data[0]); // double
+#endif
+
+  free_node(player);
+  return 0;
+}
+
+
+Node* node_from_str_lit(char tree_str[])
+{
+  char tmp_str[MAXTREESTR];
+ 
+  sprintf(tmp_str, "%s",tree_str  );  
+  return str2node(tmp_str,'(',',');
+
+}
+
+int test_tree_io(void)
+{
+
+#ifdef STEM_NODES
+
+#ifdef INTSTATES
+
 #else
 
-        buffers[i_tofill][i] =  zeroFunInput(child, buffers[i_tofill+1][i]); /* child of left node is function: apply function to right multiplicant */
 #endif
 
-      }
-    }
+//  make_test_tree("((5,4)A,(5,4)A)V"  );  
+#else
 
-  }
-  else
-  {
+#ifdef INTSTATES
+
+
 #endif
 
-    (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
-    (*op_table[(  (Node *) tree->children[1])->op])(((Node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
+//  make_test_tree("((5,4)A,(5,4)A)V"  );  
+  make_test_tree("(5,4)A"  );  
 
-    for (i=0;i<SPACEDIM;i++)
-    {
-      buffers[i_tofill][i] = buffers[i_tofill+1][i] * buffers[i_tofill+2][i];
-    }
+  make_test_tree("(4,5)A"  );  
+  make_test_tree("(5,4)S"  );  
+  make_test_tree("(5,4)M"  );  
 
-#ifdef SPECIAL_MUL
-  }
 #endif
 
-};
+  return 0;
+}
 
-void divFun(Node *tree, int i_tofill)
-{
-  /* execute division node: divide the values of the two child nodes. */
-
-  int i;  
-  (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
-  (*op_table[(  (Node *) tree->children[1])->op])(((Node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
-
-  for (i=0;i<SPACEDIM;i++)
-  {
-    buffers[i_tofill][i] = buffers[i_tofill+1][i] / buffers[i_tofill+2][i];
-  }
-
-};
-
-void ifFun(Node *tree, int i_tofill)
-{
-  /* execute if-then branching node: execute child 1 if child 0 > 0, child 2 otherwise */
-
-  int i;  
-
-  (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
-  (*op_table[(  (Node *) tree->children[1])->op])(((Node *) tree->children[1]),i_tofill+2); /* fills buffer i_tofill+2 */
-  (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[2]),i_tofill+3); /* fills buffer i_tofill+1 */
-
-
-  for (i=0;i<SPACEDIM;i++)
-  {
-
-    if (buffers[i_tofill+1][i]>0)
-      buffers[i_tofill][i] = buffers[i_tofill+2][i];      
-    else 
-      buffers[i_tofill][i] = buffers[i_tofill+3][i];      
-  }
-
-};
-
-
-void sqrtFun(Node *tree, int i_tofill)
-{
-  /* execute square root node: take the square root of the child node. */
-
-  int i;  
-  (*op_table[(  (Node *) tree->children[0])->op])(((Node *) tree->children[0]),i_tofill+1); /* fills buffer i_tofill+1 */
-
-  for (i=0;i<SPACEDIM;i++)
-  {
-    buffers[i_tofill][i] = sqrt( ( double ) buffers[i_tofill+1][i] );
-  }
-
-};
-
-
-
-/* The following functions deal with intpereting trees and converting them to strings */
-
-void interp_node(Node *tree, int i_tofill)
-{
-/* Interpret the argument node recursively using the table of operations op_table */
-
-  (*op_table[tree->op])(tree, i_tofill);
-};
 
 char* node2str(Node *tree, char trstr[])
 {
@@ -924,9 +532,18 @@ Node *child_choice(Node *t)
 
 char string_choice(char str[])
 {
+  int i;
+
   /* Choose a character inside a string randomly */
   int n = strlen(str);
-  int i = rand()%n;
+  if (n>1)
+  {
+    i = rand()%n;
+  }
+  else
+  { 
+    i = 0;
+  }
 
   return str[i];
 };
@@ -941,39 +558,13 @@ int selectindex(int ntrees, double pexp)
   return result;
 };
 
-double randomdouble(void)
-{
-  /* Produce a random floating point number, with some biases */
 
-  int i = rand()%8;
 
-  if (i<1)
-  {
-    if (rand()%2==0)
-    {
-      return 1.0;
-    }
-    else
-    {
-      return 0.0;
-    }
-  }
-  else if (i<2)
-  {
-    return (( (double) (2*rand() -RAND_MAX) )/RAND_MAX)*pow(10,rand()%11-5);
-  }
-  else if (i<5)
-  {
-    return (( (double) (2*rand() -RAND_MAX) )/RAND_MAX)*pow(10,rand()%5-2);
-  }
 
-  else
-  {
-    return (( (double) (2*rand() -RAND_MAX) )/RAND_MAX)*pow(10,rand()%7-3);
-  }
-}
 
-Node *makerandomtree(int maxdepth,double fpr,double ppr)
+
+
+Node *makerandomtree(int maxdepth,double fpr,double ppr, int max_par)
 {
   /* Create a random tree 
      fpr probability of creating normal node (recursively)
@@ -985,175 +576,171 @@ Node *makerandomtree(int maxdepth,double fpr,double ppr)
   int i=0;
   int rnd;
  
-  Node *child;
-  Node *result=talloc();
-
-  rnd = rand();
-
-  if ( (rnd<fpr*RAND_MAX) && (maxdepth>0) )
-  { /* only recursion: create random node and call makerandomtree to make children */
-    op = string_choice(instrset)-'A';
-    result->op = op;
-
-    while ( i<arg_table[(int) op] )  
-    {  
-      result->children[i] = ((Node *)  makerandomtree(maxdepth-1,fpr,ppr) );
-      i++;
-    };
-  }
-  else
-  {  /* Terminal. Create random V node. */
-    result->op = 'V'-'A';
-    
-    for (i=0; i<SPACEDIM;i++ )  
-    {
-      child = talloc();
-      rnd = rand();
-      if ( rnd<ppr*RAND_MAX  )
-      {
-        if (rand()%2 == 0)
-        {        
-  /* make parameter node */
-          child->op = 'P'-'A';
-          if (i==0)
-          {
-            child->children[0] = make_int((int)  rand()%numpar );
-          }
-          else
-          { /* exclude forcing in other state variables */
-            child->children[0] = make_int((int)  rand()%SPACEDIM );
-          }
-
-
-        }
-        else
-        {        
-  /* make function node */
-          child->op = string_choice(instrsetzero)-'A';
-        }
-
-
-      }
-      else
-      {
-  /* make constant node */
-        child->op = 'C'-'A';
-        child->children[0] = make_double(  randomdouble()  );
-      };
-      result->children[i] = ((Node *) child);
-     
-    };    
-  };
-  return result;  
-};
-
-
-Node *mrt_steered(int maxdepth,double fpr,double ppr)
-{
-  char op;
-  int i=0;
-  int rnd;
-
-  char tmp_str[MAXTREESTR];
-
-
   Node *result;
 
   rnd = rand();
 
   if ( (rnd<fpr*RAND_MAX) && (maxdepth>0) )
-  { /* make normal node */
+  { /* only recursion: create random node and call makerandomtree to make children */
 
-    if (rand()%3 != 0)
+
+#ifdef INSTRSET_RARE
+    if (rnd<0.1*fpr*RAND_MAX)
     {
-      sprintf(tmp_str,"(%g,(p0,%g)S)M",randomdouble(),randomdouble());
-      result = str2node(tmp_str);
-
- /*     ( (Node *)  result->children[1])->children[1] = ((Node *)  mrt_steered(maxdepth-1,fpr,ppr) );
-*/
+      op = string_choice(instrset_rare);
     }
     else
     {
-      result=talloc();
-      op = string_choice(instrset)-'A';
-      result->op = op;
-
-      while ( i<arg_table[(int) op] )  
-      {  
-        result->children[i] = ((Node *)  mrt_steered(maxdepth-1,fpr,ppr) );
-        i++;
-      };
+      op = string_choice(instrset);
     }
+#else
+    op = string_choice(instrset);
+#endif
 
-  }
-  else if ( rnd<ppr*RAND_MAX  )
-  {
-  /* make parameter node */
+    result = init_node(op);
 
-    result=talloc();
-
-    result->op = 'P'-'A';
-    result->children[0] = make_int((int)  rand()%numpar );
+    while ( i<arg_table[(int) op] )  
+    {  
+      result->children[i] = ((Node *)  makerandomtree(maxdepth-1,fpr,ppr, max_par) );
+      i++;
+    };
   }
   else
-  {
-  /* make constant node */
-    result=talloc();
+  {  /* Terminal. Create random leaf node. */
 
-    result->op = 'C'-'A';
- 
-    result->children[0] = make_double(  randomdouble()  );
+    result=makerandomterminal(maxdepth, fpr, ppr, max_par);
+  
   };
-
   return result;  
 };
 
 
 
-int leaves_equal(Node *t1,Node *t2)
+NodeScore makerandomns(int maxdepth,double fpr,double ppr, Experiment Exp)
 {
-// return 0 if t1 and t2 are leaf nodes that are equal, 1 otherwise
+  NodeScore ns;
 
-
-//  Node *child;
-
-//  int return_val = 1;
-
+#ifdef STEM_NODES
   int i;
 
-  if ( (  ((Node *) t1)->op =='V'-'A')  &&  (    ( (Node *) t2)->op =='V'-'A')   )
+  Node * newtree = init_node(instrsetstem[0]);
+ 
+  for (i=0;i<arg_table[newtree->op];i++)
   {
-
-
-    for (i=0;i<SPACEDIM;i++)
-    { /* get children of left multiplicant */
-
-      if (  ((Node *) t1->children[i])->op !=  ((Node *) t2->children[i])->op )
-      {
-        return 1;
-      }
-      else if ( ( ( (Node *) t1->children[i])->op == 'C'-'A') && ( (*((double *) ( (Node *) t1->children[i])->children[0])) != (*((double *) ( (Node *) t2->children[i])->children[0])) ) )
-      {
-
-        return 1;
-      }
-      else if ( ( ( (Node *) t1->children[i])->op == 'P'-'A') && ( *((int *) ( (Node *) t1->children[i])->children[0]) != *((int *) ( (Node *) t2->children[i])->children[0])  )  )
-      {
-        return 1;
-      }
-  
-
-    }
-
-  return 0;
+    newtree->children[i] = ( (Node *)  makerandomtree(maxdepth,fpr,ppr,numpar) );
   }
 
-  return 1;
+#else
+  Node * newtree = makerandomtree(maxdepth,fpr,ppr, numpar);
+#endif
 
+  ns.score = 1e19;
+  ns.node = newtree;
+
+#ifdef EVOLVEIC
+  ns.S_i = makerandomstate(Exp.S_i);
+#endif
+
+#if INTPARS > 0
+  ns.ip = makerandomint_pars(Exp);
+#endif
+
+  return ns;
 
 }
 
-Node *unifcross(Node *t1,Node *t2, double probswap, int top)
+
+
+
+
+
+
+
+
+int is_terminal(Node *t)
+{
+/* Determines whether node is a terminal node. Returns 1 if so, 0 if not. */
+
+
+//  if (t == NULL)
+//  {
+//    fprintf(stderr,"YO! \n");
+//    exit(-1);
+//  }
+
+//  fprintf(stderr,"(%s, %c ) ", instrsetleaf, t->op);
+
+
+# ifdef SUPERLEAF
+  if (strchr(instrsetsuperleaf, t->op)  != NULL)
+#else
+  if (strchr(instrsetleaf, t->op)  != NULL)
+//  if ((t->op == 'P') || (t->op == 'C'))  // faster?
+
+#endif
+
+  {
+    return 1;
+  }
+  else
+  {
+    return 0;
+  }
+}
+
+
+
+IntPars crossover_int_pars(IntPars ip1, IntPars ip2)
+{
+
+  int i;
+  int divisor;
+
+  IntPars ip = make_int_pars(INTPARS);
+
+  divisor = rand()%(INTPARS+1);
+
+  for (i=0;i<divisor;i++)
+  {
+    *(ip.data+i) = *(ip1.data+i);
+  }
+
+  for (i=divisor;i<INTPARS;i++)
+  {
+    *(ip.data+i) = *(ip2.data+i);
+  }
+
+  return ip;
+}
+
+
+
+NodeScore crossover_ns(NodeScore ns1,NodeScore ns2, double probswap, int top)
+{
+  NodeScore newns;
+
+  Node * newtree = unifcross_node(ns1.node,ns2.node, probswap, top);
+//  State S_i = make_copy_state(ns1.S_i);  // should become evolutionary crossover
+
+//  Node * newtree = crossover(ns1.node,ns2.node, probswap, top);
+
+  newns.score = 1e19;
+  newns.node = newtree;
+
+#ifdef EVOLVEIC
+  newns.S_i = crossover_states(ns1.S_i, ns2.S_i);
+# endif
+
+#if INTPARS > 0
+  newns.ip = crossover_int_pars(ns1.ip, ns2.ip);
+
+#endif
+
+  return newns;
+
+}
+
+Node *unifcross_node(Node *t1,Node *t2, double probswap, int top)
 {
   /* Uniform crossover
 
@@ -1162,19 +749,16 @@ Node *unifcross(Node *t1,Node *t2, double probswap, int top)
   Node *result;
 
   if ( (top==0) && (rand()>probswap*RAND_MAX) )
-  { /* terminal. swap t1 for t2 */
- 
+  { /* recursion terminal. swap t1 for t2 */
     return ((Node *) copy_node(t2));
   }
   else
   {
-    if ( (t1->op =='V'-'A')  ||  (t2->op =='V'-'A')   )
-    { /* terminal: t1 or t2 is a leaf node, then randomly return a copy of t1 or t2, this to achieve the mixing */
+    if (  (is_terminal(t1) == 1) || (is_terminal(t2) == 1) )
+    { /* recursion terminal. t1 or t2 is a leaf node: randomly return a copy of t1 or t2, this to achieve the mixing */
 
-
-      if ( (rand()>probswap*RAND_MAX) && (leaves_equal(t1,t2) != 0) )
+      if (rand()>probswap*RAND_MAX) 
       { 
-
         return copy_node(t2);
       }
       else
@@ -1188,20 +772,18 @@ Node *unifcross(Node *t1,Node *t2, double probswap, int top)
          heads or tails whether t1 or t2 op is used for result, and apply unifcross pairwise to children
       */
 
-      result = talloc();
-      if (  (rand()>probswap*RAND_MAX) && (t1->op != t2->op  )  )
+      if (rand()>probswap*RAND_MAX)
       {
-
-        result->op = t2->op; 
+        result = init_node(t2->op );
       }
       else
       {
-        result->op = t1->op; 
+        result = init_node(t1->op );
       }
 
       while (i<arg_table[t1->op])
       {
-        result->children[i] = ((Node *)  unifcross(((Node *) t1->children[i]) , ((Node *) t2->children[i]),probswap, 0) );
+        result->children[i] = ((Node *)  unifcross_node(((Node *) t1->children[i]) , ((Node *) t2->children[i]),probswap, 0) );
         i++;
       }
       return result;
@@ -1214,13 +796,9 @@ Node *unifcross(Node *t1,Node *t2, double probswap, int top)
   }
 }
 
-
-
-
 Node *crossover(Node *t1,Node *t2,double probswap,int top)
 {
-  /*
-    
+  /* to be updated later, with NodeScore return value instead of Node
   */
 
   int i=0;
@@ -1233,10 +811,9 @@ Node *crossover(Node *t1,Node *t2,double probswap,int top)
   else
   {
   
-    if ((t1->op !='C'-'A') && (t1->op !='P'-'A') && (t2->op !='C'-'A') && (t2->op !='P'-'A'))
+    if (  (is_terminal(t1) == 0) && (is_terminal(t2) == 0) ) // t1 and t2 both not leaf nodes
     {
-      result = talloc();
-      result->op = t1->op;
+      result = init_node(t1->op );
 
       while ( (i<arg_table[t1->op])  )
       {
@@ -1255,40 +832,64 @@ Node *crossover(Node *t1,Node *t2,double probswap,int top)
 
 
 
-
-Node *mutsteered(Node *t, double probchange)
+int mutconsts(double *consts[],int size, double mutationrate)
 {
-  int i=0;
-  Node *result;
-
-  if ( rand()<probchange*RAND_MAX )
+  int k2;
+  double tmpval=0;
+ 
+  if (size>0)
   {
-    return mrt_steered(MAXDEPTH,FPR,PPR);  
-/*    return makerandomtree(MAXDEPTH,FPR,PPR); */
+    tmpval=rand();
+    if ( tmpval<0.1*mutationrate*RAND_MAX )
+    {
+      k2=rand()%size;
+
+      if (rand()%2 == 0)
+      {
+        *consts[k2] =   randomdouble();
+      }
+
+    }
+  }
+return 0;
+}
+
+
+Node *pick_F(Node *t, int max_i)
+{
+  // picks the first function it finds
+
+  Node *child;
+  Node *result;
+  int i;
+
+  if (t->op == 'F')
+  {
+    return t;
+  }
+
+
+  else if (is_terminal(t) == 0) // not a leaf node  
+  {
+    for (i=0;i<arg_table[t->op];i++)
+    {
+      child = ((Node *) t->children[i]);
+
+      if ( (result = pick_F(child, max_i)) != NULL)
+      {
+        return result;
+      } 
+    }
+    return NULL;
+
   }
   else
   {
-    if ((t->op !='C'-'A') && (t->op !='P'-'A') )
-    {
-      result = talloc();
-      result->op = t->op;
-
-      while (i<arg_table[t->op])  
-      {
-  
-        result->children[i] = ((Node *)  mutsteered(((Node *) t->children[i]) ,probchange) );
-
-        i++;
-      };  
-    }     
-    else
-    {
-      result = copy_node(t);
-    }
-    return result;
+    return NULL;
   }
-};
 
+
+}
 
 Node *mutate(Node *t, double probchange)
 {
@@ -1297,7 +898,9 @@ Node *mutate(Node *t, double probchange)
     C/ P leaf nodes are not touched.
 
     e.g. in (p1,2.0)M p1 and 2.0 can be replaced with a subtree
-    
+ 
+    Creates new tree
+   
   */
 
   int i=0;
@@ -1306,14 +909,14 @@ Node *mutate(Node *t, double probchange)
   if ( rand()<probchange*RAND_MAX )
   {
     /* dice successful: grow random tree here */
-    return makerandomtree(MAXDEPTH,FPR,PPR);
+    return makerandomtree(MAXDEPTH,FPR,PPR, numpar);
   }
   else
   {
-    if (t->op !='V'-'A') 
+    if (is_terminal(t) == 0) // not a leaf node
     { /* only recursion: it is not a leaf node, preserve op but apply mutate to children */
-      result = talloc();
-      result->op = t->op;
+
+      result = init_node(t->op );
 
       while (i<arg_table[t->op])  
       { /* recursively throw dice to replace children with subtrees */
@@ -1341,20 +944,20 @@ Node *swapmut(Node *t, double probchange)
   int i=0;
   Node *result;
 
-  if (t->op !='V'-'A') 
+  if (is_terminal(t) == 0) // not a leaf node
   {
     if ( (rand()<probchange*RAND_MAX) && (arg_table[t->op]==2) )
     {
       /* terminal: dice successful and arg condition met: copy t with changed op */
       result = copy_node(t);
-      result->op = string_choice(instrsetswap)-'A';
+      result->op = string_choice(instrsetswap);
       return result;
     }
     else
     {
         /* only recursion: create new node preserving op and applying swapmut to children */
-        result = talloc();
-        result->op = t->op;
+
+        result = init_node(t->op );
 
         while (i<arg_table[t->op])  
         {
@@ -1388,9 +991,9 @@ Node *hoistmut(Node *t, double probreturn,int top)
   }
 
   if (rand()<probreturn*RAND_MAX )
-  { /* terminal: unsuccessful dice return t */
+  { /* dice result induces hoisting on non-terminal node */
 
-    if (t->op !='V'-'A')  // not leaf node
+    if (is_terminal(t) == 0)  // not leaf node
     { /*  only recursion. Hoist up one of the child nodes */
       result = ((Node *)  hoistmut(((Node *) child_choice(t) ) ,probreturn,0) );
     }     
@@ -1400,7 +1003,7 @@ Node *hoistmut(Node *t, double probreturn,int top)
     }
   }
   else
-  {
+  { /* dice result induces no hoisting */
 
     result = t;
 
@@ -1408,23 +1011,64 @@ Node *hoistmut(Node *t, double probreturn,int top)
   return result;
 };
 
-Node *allmut(Node *t, double probchange)
+
+Node* allmut_node(Node *tree, double probchange)
 {
   int rnd;
+  Node * newtree;
 
   rnd = rand()%4;
   if (rnd < 1)
   {
-    return hoistmut(t, probchange,1);
+    newtree = hoistmut(tree, probchange,1);
   }
   else if (rnd < 2)
   {
-    return swapmut(t, probchange);
+    newtree = swapmut(tree, probchange);
   }
   else
   {
-    return mutate(t, probchange);
+    newtree = mutate(tree, probchange);
   }
+
+  return newtree;
+}
+
+
+NodeScore allmut(NodeScore ns, double probchange, Experiment Exp)
+{
+  Node * newtree;
+  NodeScore newns;
+
+#ifdef STEM_NODES
+  int i;
+
+  newtree = init_node(instrsetstem[0]);
+
+  for (i=0;i<arg_table[newtree->op];i++)
+  {
+    newtree->children[i] =  allmut_node( ((Node *) ns.node->children[i]) , probchange );
+  }
+
+#else
+  newtree = allmut_node(ns.node, probchange);
+
+
+#endif
+
+  newns.score = 1e19;
+  newns.node = newtree;
+
+#ifdef EVOLVEIC
+  newns.S_i = mut_state(ns.S_i);  // will become mutation on ns.S_i
+#endif
+
+#if INTPARS > 0
+  newns.ip = mut_int_pars(ns.ip, Exp);
+#endif 
+
+  return newns;
+
 };
 
 
@@ -1442,541 +1086,9 @@ yielding the type
 */
 
 
-void c_doloop(double* ffs,double* result, Node *tree, int m, int n, double* S_init, int ts_factor)
-{
-/* integration loop using simple time stepping.
 
- result is on the forcing grid */
 
-
-  int t0=ffs[0];
-  int tend=ffs[(m-1)*n];
-  double dt;
-  int steps=0;
-  int forcing_t=0;
-  int t_elapsed=0;
-  int i;
-  double dt_forc;
-  int steps_forc=0;
-
-/*  double S_init=0.3; 
-  double S_init=0.345;
-*/
-
-  double S[SPACEDIM];
-
-/*  double S_mem;
-  double Sdotdt=0;
-*/
-
-/*  double lincoef = ((double) 1.0)/((double) (0-t0)); */
-/*  S[0]=S_init; */
-/*  S_mem=S;
-*/
-
-/*
-  for (i=1;i<SPACEDIM;i++)
-  {
-    S[i] = 0;
-  }
-*/
-
-  for (i=0;i<SPACEDIM;i++)
-  {
-    S[i] = S_init[i];
-  }
-
-  dt_forc = ffs[n]-ffs[0];   /* time index to forcing array */
-  dt = dt_forc/ts_factor;
-
-/*  fprintf(stderr,"%d %d ", dt_forc, dt);
-*/
-  
-  while ((t_elapsed<tend-t0) && (steps_forc<m))
-  {
-    forcing_t= (int) round(t_elapsed/dt_forc);    /* time index to forcing array */
-    reg[0]=S[0];
-    reg[1]=S[1];
-/*    reg[2]=ffs[forcing_t*n+1]; */
-
-  /* remaining registers reserved for forcing */
-    for (i=0;i<n-1;i++)
-    {
-      reg[2+i]= ffs[forcing_t*n+1+i];
-    }
-
-
-/*    reg[2]=fixedforc2[steps];
-    reg[3]=d;
-    reg[2]=fixedforc[steps];
-
-    reg[3]=Sdotdt;
-    reg[3]=t_elapsed;
-    reg[3]=0.0;
-*/
-    for (i=0;i<SPACEDIM;i++)
-    {
-      *(result+(steps_forc*SPACEDIM)+i ) = S[i];
-    }
-
-
-    t_elapsed += dt;
-
-
-    (*op_table[tree->op])(tree,0);
-
-/*    if (fabs(buffers[0][0])>0.0004 )
-    {
-      *result=1e19;
-      break;
-    }  
-*/
-
-    for (i=0;i<SPACEDIM;i++)
-    {
-      S[i] += buffers[0][i]*dt;
-    }
-
-/* degeneracy checks */
-    for (i=0;i<SPACEDIM;i++)
-    {
-      if (fabs(S[i])>BLOWUP || isnan(S[i]) || (fabs(buffers[0][i])>MAXCHANGE/dt ) )
-      {
-        t_elapsed = tend-t0;
-        i = SPACEDIM;
-       
-        *result=1e19;
-        break;
-      }
-    }
-
-    if (steps%ts_factor == 0)
-    {
-      steps_forc++;
-    }
-
-    steps++;
-  };
-  fprintf(stderr,"steps_forc: %d\n",steps_forc);
-
-}
-
-
-void f_t(double *S,int n, double t_elapsed, double dt_forc, double *ffs, Node *tree)
-{ /* deposit S values and forcing in registers reg[] and run tree */
-  /* n: number of forcing terms plus time (so n=2 for one forcing term) */
-
-  int i, forcing_t;
-  double remainder;
-
-  /* first SPACEDIM registers reserved for state vector S */
-  for (i=0;i<SPACEDIM;i++)
-  {
-    reg[i]=S[i];
-  }
-
-
-  /* explicit t dependence */
-/*  reg[2]=ffs[forcing_t*n+1]; */
-
-  forcing_t = ((int) floor(t_elapsed/dt_forc));  /* time index to forcing array */
-
-# ifdef INTERP_FORCING
-  remainder = t_elapsed - forcing_t*dt_forc;
-# endif
-
-  /* remaining registers reserved for forcing. Fill them with forcing */
-  for (i=0;i<n-1;i++)
-  {
-# ifdef INTERP_FORCING
-    reg[SPACEDIM+i]= ffs[forcing_t*n+1+i] + remainder*(ffs[(forcing_t+1)*n+1+i] - ffs[forcing_t*n+1+i])/dt_forc;
-# else
-    reg[SPACEDIM+i]= ffs[forcing_t*n+1+i];
-#endif
-  }
-
-  (*op_table[tree->op])(tree,0); /* run tree and deposit in buffers[:] */
-}
-
-
-void f_t_2D(double *S,int n, double t_elapsed, double dt_forc, double *ffs, Node *tree)
-{ /* deposit S values and forcing in registers reg[] and run tree */
-
-  /* n: number of forcing terms plus time (so n=2 for one forcing term) */
-
-  int i, forcing_t;
-  double remainder;
-
-  /* first 2 registers reserved for state vector S */
-  reg[0]=S[0];
-  reg[1]=S[1];
-  /* explicit t dependence */
-/*  reg[2]=ffs[forcing_t*n+1]; */
-
-  forcing_t = ((int) floor(t_elapsed/dt_forc));  /* time index to forcing array */
-
-//  remainder = fmod(t_elapsed, dt_forc);
-
-#ifdef INTERP_FORCING
-  remainder = t_elapsed - forcing_t*dt_forc;
-#endif
-
-  /* remaining registers reserved for forcing */
-  for (i=0;i<n-1;i++)
-  {
-
-#ifdef INTERP_FORCING
-    reg[2+i]= ffs[forcing_t*n+1+i] + remainder*(ffs[(forcing_t+1)*n+1+i] - ffs[forcing_t*n+1+i])/dt_forc;
-#else
-    reg[2+i]= ffs[forcing_t*n+1+i];
-#endif
-
-  }
-
-
-  (*op_table[tree->op])(tree,0); /* run tree and deposit in buffers[:] */
-}
-
-void RK4(double* ffs,double* result, Node *tree, int m, int n, double *S_init, int ts_factor)
-{
-/*
-  Runge Kutta 4 solver of tree equation. 
-
-  Trees are executed recursively by calling (*op_table[tree->op])(tree,0), where the 0 arguments tells functions to deposit results in vector buffers[0][:]. Calling the tree reads values from reg[:].
-
-  reg[2] is forcing, i.e. the explicit time dependence of the function f.
-
-  result is on the forcing grid, indexed with steps_forc
-
-  m: shape[0] of forcing ffs, time dimension array length of forcing
-  n: shape[1] of forcing ffs, the amount of forcing terms plus time (so n=2 for one forcing term)
-
-
-*/
-
-  int t0=ffs[0];
-  int tend=ffs[(m-1)*n];
-  double dt;
-  int steps=0;
-  double t_elapsed=0;
-  int i;
-  double dt_forc;
-  int steps_forc=0;
-  double S_dot_dt[SPACEDIM];
-
-/*  double S_init=0.3; 
-  double S_init=0.345;
-*/
-
-  double S[SPACEDIM];
-  double S_arg[SPACEDIM];
-
-/* Runge Kutta k's */
-  double k1[SPACEDIM]; 
-  double k2[SPACEDIM]; 
-  double k3[SPACEDIM]; 
-  double k4[SPACEDIM];
-
-/*  S[0]=S_init; */
-
-  for (i=0;i<SPACEDIM;i++)
-  {
-    S[i] = S_init[i];
-  }
-
-  dt_forc = ffs[n]-ffs[0]; /* time step for forcing */
-  dt=dt_forc/ts_factor; /* time step for integration loop */
-
-/*  fprintf(stderr,"%d %d ", dt_forc, dt);
-*/
-  
-  while (t_elapsed<tend-t0) /* integration loop */
-  {
-    for (i=0;i<SPACEDIM;i++)
-    {
-      *(result+(steps_forc*SPACEDIM)+i ) = S[i];
-    }
-
-    t_elapsed += dt;
-
-    /* RK4 term k1 */
-    f_t_2D(S, n, t_elapsed, dt_forc, ffs, tree);
-    for (i=0;i<SPACEDIM;i++)
-    { 
-      k1[i] = buffers[0][i];
-    }
-
-    /* RK4 term k2 */
-    for (i=0;i<SPACEDIM;i++)
-    {
-      S_arg[i] = S[i] + k1[i]*dt/2;
-    }
-    f_t_2D(S_arg, n, t_elapsed + dt/2, dt_forc, ffs, tree);  /* deposit S values and forcing in registers reg[] and run tree */
-    for (i=0;i<SPACEDIM;i++)
-    {
-      k2[i] = buffers[0][i];
-    }
-
-    /* RK4 term k3 */
-    for (i=0;i<SPACEDIM;i++)
-    {
-      S_arg[i] = S[i] + k2[i]*dt/2;
-    }
-    f_t_2D(S_arg, n, t_elapsed + dt/2, dt_forc, ffs, tree); /* run tree */
-    for (i=0;i<SPACEDIM;i++)
-    {
-      k3[i] = buffers[0][i];
-    }
-
-    /* RK4 term k4 */
-    for (i=0;i<SPACEDIM;i++)
-    {
-      S_arg[i] = S[i] + k3[i]*dt;
-    }
-    f_t_2D(S_arg, n, t_elapsed + dt, dt_forc, ffs, tree); /* run tree */
-    for (i=0;i<SPACEDIM;i++)
-    {
-      k4[i] = buffers[0][i];
-    }
-
-    /* increment S */
-    for (i=0;i<SPACEDIM;i++)
-    {
-      S_dot_dt[i] = (k1[i] + 2.0*k2[i] + 2.0*k3[i] + k4[i])*dt/6.0;
-      S[i] += S_dot_dt[i];
-    }
-
-
-/* degeneracy checks */
-    for (i=0;i<SPACEDIM;i++)
-    {
-      if (fabs(S[i])>BLOWUP || isnan(S[i]) || (fabs( S_dot_dt[i] ) > MAXCHANGE  ) )
-      {
-
-  /*      fprintf(stderr,"degeneracy at i=%d",i);  */
-        t_elapsed = tend-t0;
-        i = SPACEDIM;
-    
-        *result=1e19;
-        break;
-      }
-    }
-
-    if (steps%ts_factor == 0)
-    {
-      steps_forc++;
-    }
-
-    steps++;
-  };
-}
-
-
-
-void fill_reg2(double* ffs, int steps, int ts_factor, int steps_forc, int n)
-{
-  reg[2]= ffs[steps_forc*n+1]; 
-}
-
-void fill_reg2_mod(double* ffs, int steps, int ts_factor, int steps_forc, int n)
-{ /* this may need to be replaced with dt_forc and fmod code, a la RK4 */
-  reg[2]= ffs[steps_forc*n+1] + (steps%ts_factor)*(ffs[(steps_forc+1)*n+1] - ffs[steps_forc*n+1])/ts_factor;
-}
-
-void c_doloop_interp(double* ffs,double* result, Node *tree, int m, int n, double* S_init, int ts_factor)
-{
-/* Numerical integration loop. result[0.0] = 1e19 signals failure */
-
-
-  int t0=ffs[0];
-  int tend=ffs[(m-1)*n];
-  double dt;
-  int steps=0;  /* incremented by 1 during run loop to index result array */
-  int steps_forc=0;
-  double t_elapsed=0;
-  int i;
-  double dt_forc;
-  int forcing_t;
-  double remainder;
-
-/*  double S_init=0.3; 
-  double S_init=0.345;
-*/
-
-  double S[SPACEDIM];
-
-/*  double S_mem;
-  double Sdotdt=0;
-*/
-
-
-/*  double lincoef = ((double) 1.0)/((double) (0-t0)); */
-/*  S[0]=S_init; */
-/*  S_mem=S;
-*/
-
-  for (i=0;i<SPACEDIM;i++)
-  {
-    S[i] = S_init[i];
-  }
-
-  for (i=1;i<SPACEDIM;i++)
-  {
-    S[i] = 0;
-  }
-
-  dt_forc = ffs[n]-ffs[0]; /* time step forcing */
-  dt = dt_forc/ts_factor;  /* time step of integration */
-
-  fprintf(stderr,"%g %g ", dt_forc, dt);
-
-  while (t_elapsed<tend-t0-dt) /* to keep step_forc in bounds */
-  { /* steps index to result array initialized to 0, incremented by 1 */
-
-
-   
-    reg[0]=S[0];
-    reg[1]=S[1];
-    forcing_t = ((int) floor(t_elapsed/dt_forc));  /* time index to forcing array */
-
-    remainder = fmod(t_elapsed, dt_forc);
-
-    reg[2]= ffs[forcing_t*n+1] + remainder*(ffs[(forcing_t+1)*n+1] - ffs[forcing_t*n+1])/dt_forc;
-
-
-
-/*    fprintf(stderr,"yo: %g",(ffs[(steps_forc+1)*n+1] - ffs[steps_forc*n+1])/ts_factor);
-*/
-
-
-    for (i=0;i<SPACEDIM;i++)
-    {
-      *(result+(steps_forc*SPACEDIM)+i ) = S[i];
-    }
-
-    t_elapsed += dt;
-    
-
-    (*op_table[tree->op])(tree,0);
-
-/* check on S_dot. */
-/*    omit for now
-    if (fabs(buffers[0][0])>0.02/dt ) 
-    {
-     
-      *result=1e19;
-      break;
-    }  
-*/
-
-    for (i=0;i<SPACEDIM;i++)
-    {
-      S[i] += buffers[0][i]*dt;
-    }
-
-/* degeneracy checks */
-    for (i=0;i<SPACEDIM;i++)
-    {
-      if (fabs(S[i])>BLOWUP || isnan(S[i])  )
-      {
-        t_elapsed = tend-t0-dt;
-        i = SPACEDIM;
-
-        *result=1e19;
-        break;
-      }
-    }
-
-
-    steps++;
-    if (steps%ts_factor == 0)
-    {
-      steps_forc++;
-    }
- 
-  };
-/*  fprintf(stderr,"yo: %d, m: %d \n",steps_forc,m);   */
-}
-
-
-void c_map_f(char *treestring, double *A, double *B, int shape_i, int shape_j, double S0_start, double S1_start, double S0_end, double S1_end, double *forcing, int forcing_dim)
-{
-  /* For specific forcing value, create two 2D arrays of tree values for S vector values between -2 and 2. */
-
-  Node *tree;
-
-  int i,j;
-  double dS0, dS1;
- 
-  char tmp_str[MAXTREESTR];
-
-  init_tables();
-
-  reg[0] = -2.0;
-  reg[1] = -2.0;
-  for (i=0;i<forcing_dim;i++)
-  {
-    reg[2+i] = *(forcing+i);
-  }
-
-
-  dS0 = ((double)  (S0_end-S0_start)/shape_i);
-  dS1 = ((double)  (S1_end-S1_start)/shape_j);
-
-/*  fprintf(stderr,"%s\n",treestring);
-*/
-  strcpy(tmp_str,treestring);  
-
-  if (check_brackets(treestring) == -1)
-  {
-    fprintf(stderr,"Error in tree string: bracket tree integrity check failed. \n");
-    /* abort and trigger failure */
-    return;    
-  }
-
-  tree = str2node(tmp_str);
-
-  if (check_node(tree) == 1)
-  {
-    fprintf(stderr,"Error: tree integrity check failed.");
-        /* abort and trigger failure */
-    return;  
-  }
-
-/*  printf("dS0: %g, dS1: %g \n",dS0,dS1); */
-
-  for (j=0;j<shape_j;j++)
-  {
-    reg[0] = -2.0;
-    for (i=0;i<shape_i;i++)
-    {
-      
-/*      printf("%g %g %g \n",reg[0],reg[1], reg[2]); */
-      (*op_table[tree->op])(tree,0); /* run tree and deposit in buffers[:] */
-
-      A[j*shape_i+i] =  buffers[0][0];
-      B[j*shape_i+i] =  buffers[0][1];
-
-      reg[0] += dS0;
-    }
-    reg[1] += dS1;
-  }
-  free_node(tree);
-}
-
-void f(double *S, Node *tree)
-{
-
-  reg[0]=S[0];
-  reg[1]=S[1];
-  reg[2]=S[2];
-
-  (*op_table[tree->op])(tree,0); /* run tree and deposit in buffers[:] */
-}
-
-
-
-int compare_trees(Node *t1, Node *t2)
+int compare_nodes(Node *t1, Node *t2)
 {
 /* determine whether 2 trees are identical. returns 0 when identical, 1 otherwise*/
 
@@ -1989,18 +1101,16 @@ int compare_trees(Node *t1, Node *t2)
   }
   else
   {
-
-    if ( (t1->op =='V'-'A') && (leaves_equal(t1,t2) != 0) )
+    if  (leaves_equal(t1,t2) == 0)
     {
-      return 1;
-
+      return 0;
     }
     else
     { /* compare children pair-wise if any. if one of the children returns 1, return 1 */
 
       for (j=0;j<arg_table[t1->op];j++)  
       {
-        if (compare_trees( ((Node *) t1->children[j]) , ((Node *) t2->children[j]) ) == 1)
+        if (compare_nodes( ((Node *) t1->children[j]) , ((Node *) t2->children[j]) ) == 1)
         {
           return 1;
         }
@@ -2012,8 +1122,41 @@ int compare_trees(Node *t1, Node *t2)
 
 
 
+int compare_ns(NodeScore ns1, NodeScore ns2)
+{
+/* determine whether 2 NodeScores are identical. returns 0 when identical*/
 
-int does_tree_exist(Node *newtree,  Node *trees[], Point my_loc, Point max_loc, int compgridsize)
+  int S_i_flag=0;
+  int ip_flag = 0;
+
+  int ns_flag = compare_nodes(ns1.node,ns2.node);
+
+#ifdef EVOLVEIC
+
+  S_i_flag = compare_state(ns1.S_i, ns2.S_i);
+
+#endif
+
+#if INTPARS > 0
+ 
+  int i;
+  for (i=0;i<INTPARS;i++)
+  {
+    if ( ns1.ip.data[i] != ns2.ip.data[i]   )  
+    {
+      ip_flag = 1; 
+    }
+  }
+#endif
+
+  return ns_flag + S_i_flag + ip_flag;
+
+}
+
+
+
+
+int does_tree_exist(NodeScore newns, Population pop, Point my_loc, int compgridsize)
 {
   // checks if tree is in array of trees. returns index if yes, -1 otherwise
   // spiral around my_loc, scanning most likely locations first
@@ -2021,7 +1164,7 @@ int does_tree_exist(Node *newtree,  Node *trees[], Point my_loc, Point max_loc, 
 
   int i,j, i_tree;
  
-  Rect cell = point2cell(my_loc, max_loc, compgridsize);
+  Rect cell = point2cell(my_loc, pop.max_loc, compgridsize);
 
   for (i=cell.min.x;i<cell.max.x;i++)
   {  
@@ -2030,14 +1173,13 @@ int does_tree_exist(Node *newtree,  Node *trees[], Point my_loc, Point max_loc, 
       my_loc.x = i; // reusing my_loc for different purpose
       my_loc.y = j;
 
-      i_tree = point2i(my_loc, max_loc.x);
-      if (compare_trees(newtree, trees[i_tree]) == 0)
+      i_tree = point2i(my_loc, pop.max_loc.x);
+      if ((compare_ns(newns, pop.pop[i_tree]) == 0) && (i_tree < pop.popsize))
       {
         return i_tree;
       }
     } 
   }
-
   return -1;
 }
 
@@ -2046,12 +1188,7 @@ int conparcount(Node *t, int *current)
   /* counts constants and parameters in a tree */
   int j=0;
 
-  if (t->op =='C'-'A')  
-  {
-    (*current)++;
-    return 1;
-  }
-  else if (t->op =='P'-'A')
+  if   ( strchr(instrsetleaf, t->op ) != NULL) 
   {
     (*current)++;
     return 1;
@@ -2076,331 +1213,25 @@ int conparcount(Node *t, int *current)
 
 
 
-int tree_consts(Node *t, double *consts[], int *current, int maxconsts)
+
+
+int init_buffer(void)
 {
- 
-  int j=0;
-  
-  if (t->op =='C'-'A')  
-  {
-    if (*current<maxconsts)
-    {
-      consts[(*current)++] =  ((double *) t->children[0]); 
-      return 1;
-    }
-    else
-    {
-      return -1;
-    }
-  }
-  else if (t->op =='P'-'A')
-  {
-    return 0;
-  }
-  else
-  {
-    while (j<arg_table[t->op])  
-    {  
-      if ( tree_consts( ((Node *) t->children[j]), consts,current,maxconsts) > -1 )     
-      {
-        j++;
-      }
-      else
-      {
-        return -1;
-      }
-    };
-  
-    if (*current>=maxconsts)
-    {
-      return -1;
-    }
-    return *current;  
-  }     
-  return -1;
-};
+/* initialize the buffer */
 
-
-
-
-
-
-void free_node(Node *t)
-{
-
-  if (t == NULL)
-  {
-    return;
-  }
- 
-  int i;
-
-  if  ((t->op == 'C'-'A') || (t->op == 'P'-'A'))
-  {
-
-    if (t->children[0] != NULL)
-    {
-      free(t->children[0]);
-    }
-  }
-  else
-  {
-    for (i=0;i<arg_table[(int) t->op];i++)
-    {
-      free_node(t->children[i]);
-    }
-  }
-
-  if (t != NULL)
-  {
-    free(t);
-  }
-
-  node_count--;
-}
-
-int check_node(Node *t)
-{
-  Node *child;
-
-  if (t == NULL)
-  {
-    return 1;
-  }
- 
-  int i;
-
-  if  (t->op == 'C'-'A')
-  { /* terminal */
-
-    if (t->children[0] != NULL)
-    {
-      return 0;
-    }
-    else
-    {
-      fprintf(stderr,"Warning: illegal const encountered: NULL child!\n");
-      return 1;
-    }
-  }
-  else if (t->op == 'P'-'A')
-  { /* terminal */
-    if ( ( t->children[0] != NULL ) && ( *((int *) t->children[0]) < MAXPAR) && ( *((int *) t->children[0]) >=0 ) )
-    {
-      return 0;
-    }
-    else
-    {
-      fprintf(stderr,"Warning: illegal par encountered!\n");
-      return 1;
-    }  
-
-  }
-  else
-  {
-    if (strchr(instrsetnodes, t->op + 'A') == NULL)
-    {
-      fprintf(stderr,"Warning: illegal op encountered!\n");
-      return 1;
-    }
-
-    if (t->op == 'V'-'A') 
-    { /* terminal: check for non sub-leaf children to V */
-
-      for (i=0;i<arg_table[(int) t->op];i++)
-      {
-        child = ((Node *) t->children[i]);
-        if (child == NULL)
-        {
-          fprintf(stderr,"Warning: NULL child node encountered!\n");
-          return 1;
-        }
-
-        if (  (strchr(instrsetzero, child->op + 'A') == NULL) && (child->op != 'C'-'A') && (child->op != 'P'-'A') )
-        {
-          fprintf(stderr,"Warning: illegal V node encountered!\n");
-          return 1;
-        }
-
-      }
-
-    }
-    else
-    { /* check for illegal children in super-leaf nodes */
-      for (i=0;i<arg_table[(int) t->op];i++) /* zero-nodes will always return 0  */
-      {
-        child = ((Node *) t->children[i]);
-        if (child == NULL)
-        {
-          fprintf(stderr,"Warning: NULL child node encountered!\n");
-          return 1;
-        }
-    
-        if (   (strchr(instrsetzero, child->op + 'A') != NULL) || (child->op == 'C'-'A') || (child->op == 'P'-'A') )
-        {
-          fprintf(stderr,"Warning: illegal super-leaf node encountered!\n");
-          return 1;
-        }        
-        else if (check_node(child) == 1) /* the only recursion: recursively check children */
-        { 
-          return 1;
-        }
-
-      }
-    }
-
-    return 0;
-  }
-
-  if (t != NULL)
-  {
-    free(t);
-  }
-
-  node_count--;
-}
-
-
-int init_reg(int ffs1)
-{
-  int i;
-  for (i=0;i<MAXPAR;i++)
-  {
-    reg[i] = 0.0;
-  }
-
-  numpar = ffs1 - 1 + SPACEDIM;
-
-  if (numpar > MAXPAR)
-  {
-    fprintf(stderr,"Warning! Number of variables numpar=%d, with SPACEDIM=%d, forcing terms=%d exceeds MAXPAR=%d \n",numpar,SPACEDIM, ffs1-1,MAXPAR);
-    return 1;
-  }
-
-  return 0;
-}
-
-int init_tables(void)
-{
-/* Initialize op_table, arg_table and code2str_table
-   op_table		table linking op codes to function pointers executed at runtime
-   arg_table		table recording number of arguments for each op
-   code2str_table 	table linking op codes to function pointers converting nodes to strings
-
-    code2str_table requires instrsetnodes, including the leaf node V.
-*/
-
-  int i;
-
-  for (i=0;i<OPTABLE;i++)
-  {
-    op_table[i] = &nopFun;
-  };
-
-  /* linking ops to recursive functions, leafFun is terminal as it produces stored values */
-  op_table['A'-'A'] = &addFun;  
-  op_table['S'-'A'] = &subFun;
-  op_table['M'-'A'] = &mulFun;
-  op_table['D'-'A'] = &divFun;
-  op_table['I'-'A'] = &ifFun;
-  op_table['Q'-'A'] = &sqrtFun;
-  op_table['V'-'A'] = &leafFun;
-
-
-  for (i=0;i<OPTABLE;i++)
-  {
-    arg_table[i] = 0;
-  };
-
-  /* record number of fun args 
-     Highest value must be less than MAXCHILD
-  */
-
-  i = 0;
-  while (instrsetzero[i] != '\0')
-  {
-    arg_table[instrsetzero[i]-'A'] = 0;
-    i++;
-  }
-
-  arg_table['A'-'A'] = 2;  
-  arg_table['S'-'A'] = 2;
-  arg_table['M'-'A'] = 2;
-  arg_table['D'-'A'] = 2;
-  arg_table['I'-'A'] = 3;
-
-  arg_table['V'-'A'] = SPACEDIM;
-
-
-/* code2str_table table linking op codes to function pointers, functions convert node to str in brack notation 
-   core of the node2str convenience function  */
-
-  for (i=0;i<OPTABLE;i++)
-  {
-    code2str_table[i] = &nopChr;
-  };
-
-  /* these are the true leaf nodes for printing purposes, not V (V is leaf during execution) */
-  code2str_table['C'-'A'] = &constChr;  
-  code2str_table['P'-'A'] = &parChr;  
-
-  i=0;
-  while (instrsetnodes[i] != '\0')
-  {
-    switch(arg_table[instrsetnodes[i]-'A'])
-    {
-    case 0 :
-      code2str_table[instrsetnodes[i]-'A'] = &zeroFunChr;
-      break;
-    case 1 :
-      code2str_table[instrsetnodes[i]-'A'] = &oneFunChr;
-      break;
-    case 2 :
-      code2str_table[instrsetnodes[i]-'A'] = &twoFunChr;
-      break;
-    case 3 :
-      code2str_table[instrsetnodes[i]-'A'] = &threeFunChr;
-      break;
-    default :
-      code2str_table[instrsetnodes[i]-'A'] = &nopChr;
-      break;
-    }
-
-    i++;
-  }; 
-  return 0;
-}
-
-
-int init_buffer(int popsize)
-{
-/* initialize the buffer with text representations of random trees*/
-
-  int i;
-  char tmp_str[MAXTREESTR];
-  Node *yo;
 
   treebuffer[0] = '\0';
-        for (i=0;i<popsize;i++)
-  {
-    yo = makerandomtree(MAXDEPTH,FPR,PPR); 
-    
-    (*code2str_table[(int) yo->op])(yo,tmp_str);
-
-    strcat(treebuffer,  tmp_str   );
-    strcat(treebuffer,  delims  );
-    free_node(yo);
-  }  
+ 
   return 0;
 }
 
 
-int export_internal(Node *trees[],double *score_vals, Point my_loc, Point dest_loc, Point max_loc, int tour, int compgridsize, int migrants)
+int export_internal(Population pop, Point my_loc, Point dest_loc, int tour, int compgridsize, int migrants)
 { /* export $migrants internal migrants from cell around Point my_loc to cell around Point dest_loc
      identify pairs of indices into trees array for tree pointers to be swapped     
 
-     origin index determined via k = tournament_scsize2D(trees,score_vals,my_loc,max_loc,MIGTOUR, compgridsize)
-     destination index via i_tour = reverse_tour_size2D(trees,score_vals,dest_loc, max_loc, tour, compgridsize);
+     origin index determined via tournament_scsize2D
+     destination index via reverse_tour_size2D
 
 
 */
@@ -2412,19 +1243,19 @@ int export_internal(Node *trees[],double *score_vals, Point my_loc, Point dest_l
   for (i=0;i<migrants;i++)
   {
 
-    i_orig = tournament_scsize2D(trees,score_vals,my_loc,max_loc,MIGTOUR, compgridsize);
-    i_dest = reverse_tour_size2D(trees,score_vals,dest_loc, max_loc, tour, compgridsize);
+    i_orig = tournament_scsize2D(pop,my_loc,MIGTOUR, compgridsize);
+    i_dest = reverse_tour_scsize2D(pop,dest_loc, tour, compgridsize);
 
 
-    tmptree_ptr = trees[i_orig];
-    trees[i_orig] = trees[i_dest];
-    trees[i_dest] = tmptree_ptr;
+    tmptree_ptr = pop.pop[i_orig].node;
+    pop.pop[i_orig].node = pop.pop[i_dest].node;
+    pop.pop[i_dest].node = tmptree_ptr;
   }
 
   return 0;
 }
 
-int internal_migration(Node *trees[],double *score_vals, Point max_loc, int tour, int compgridsize, int migrants)
+int internal_migration(Population pop, int tour, int compgridsize, int migrants)
 {
 /* loop through all cells
 	for each cell
@@ -2438,8 +1269,8 @@ int internal_migration(Node *trees[],double *score_vals, Point max_loc, int tour
 // determine cells
 // determine what is a neighbor
 
-  max_i_cell = max_loc.x/compgridsize;
-  max_j_cell = max_loc.y/compgridsize;
+  max_i_cell = pop.max_loc.x/compgridsize;
+  max_j_cell = pop.max_loc.y/compgridsize;
 
   for (j_cell=0;j_cell<max_j_cell;j_cell++)
   {
@@ -2453,29 +1284,28 @@ int internal_migration(Node *trees[],double *score_vals, Point max_loc, int tour
       { // export towards left neighbor
         dest_loc.x = my_loc.x - 1;
         dest_loc.y = my_loc.y;  
-        export_internal(trees,score_vals, my_loc, dest_loc, max_loc, tour, compgridsize,migrants); // export to one neighbor
+        export_internal(pop, my_loc, dest_loc, tour, compgridsize,migrants); // export to one neighbor
       }
 
       if (i_cell<max_i_cell-1) // do not export into the wall
       { // export towards right neighbor
         dest_loc.x = my_loc.x + 1;
         dest_loc.y = my_loc.y;  
-        export_internal(trees,score_vals, my_loc, dest_loc, max_loc, tour, compgridsize,migrants); // export to one neighbor
+        export_internal(pop, my_loc, dest_loc, tour, compgridsize,migrants); // export to one neighbor
       }
-
 
       if (j_cell>0) // do not export into the wall
       { // export towards upward neighbor
         dest_loc.x = my_loc.x;
         dest_loc.y = my_loc.y-1;  
-        export_internal(trees,score_vals, my_loc, dest_loc, max_loc, tour, compgridsize,migrants); // export to one neighbor
+        export_internal(pop, my_loc, dest_loc, tour, compgridsize,migrants); // export to one neighbor
       }
 
       if (j_cell<max_j_cell-1) // do not export into the wall
       { // export towards downward neighbor
         dest_loc.x = my_loc.x;
         dest_loc.y = my_loc.y+1;  
-        export_internal(trees,score_vals, my_loc, dest_loc, max_loc, tour, compgridsize,migrants); // export to one neighbor
+        export_internal(pop, my_loc, dest_loc, tour, compgridsize,migrants); // export to one neighbor
       }
     }
   }
@@ -2518,82 +1348,454 @@ Point get_boundary(int i_iofile, int i, Point max_loc, int migrants)
 
 }
 
-int migrants2buffer(Node *trees[],double *score_vals, int i_iofile ,Point max_loc, double* ffs,double* result, double *obs, long* I, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init_array,int ts_factor, int startscore_i, int migrants ,int compgridsize )
+
+IntPars str2int_pars(char * text)
 {
-/* creates output file with spatially ordered list of trees, depending on the direction of the output file.
 
-  j: output direction (1-4: xm,xp,ym,yp)
+  int i;
+  char * p_end;
+  char * p_next;
+  char * tmp_str = (char *)malloc(sizeof(char)*(MAXTREESTR));
+  IntPars ip = make_int_pars(INTPARS);
+  int end_flag = 0;
 
-*/
+  const char start_ch = '(';
+  const char end_ch = ')';
 
-  Point boundary_loc;
+  const char s[2] = ",";
+  char *token;
+  char *saveptr;
 
-  int i,k;
+
+  strcpy(tmp_str, text);
+
+//  fprintf(stderr, " %s\n", tmp_str );
+
+  if (*tmp_str != start_ch)
+  {
+    fprintf(stderr,"Problem reading int pars. No opening bracket. \n"); 
+    free_int_pars(ip);
+    ip.data = NULL;
+    return ip;
+  }
+
+  p_next = tmp_str + 1;
+
+  /* get the first token */
+  token = strtok_r(p_next, s, &saveptr);
+   
+  /* walk through other tokens */
+  i=0;
+  while( (token != NULL) && (end_flag == 0) && (i<INTPARS) ) 
+  {
+
+    if ( (p_end=strchr(token, end_ch)) != NULL  )
+    {
+      end_flag = 1;
+      *p_end = '\0';
+    }
+
+    *(ip.data+i) = atoi(token);
+    
+    token = strtok_r(NULL, s, &saveptr);
+
+    i++;
+  }
+
+  if ( (i < INTPARS) || (end_flag == 0) )
+  {
+    fprintf(stderr,"Problem reading int pars. Saved data length %d.\n",i);
+    free_int_pars(ip);
+    ip.data = NULL;
+    return ip;    
+  }
+
+  free(tmp_str);
+
+  return ip;
+}
+
+
+
+
+
+
+int int_pars2bufferline(NodeScore ns, char treebuffer[], IntPars ip )
+{
   char tmp_str[MAXTREESTR];
+  int i;
 
-#ifdef CHECK_MIG_IC_STABILITY
-  double S_init_array2[SPACEDIM];
-#endif
+  sprintf(tmp_str,"(");
+  strcat(treebuffer,  tmp_str ); 
 
-#if defined (CHECK_MIG_STABILITY) || defined (CHECK_MIG_IC_STABILITY)
-  double error;
-#endif
+  for (i=0;i<INTPARS;i++)
+  {
+    sprintf(tmp_str,"%d", *(ip.data+i) );
+    strcat(treebuffer,  tmp_str );
 
-/*  fprintf(stderr,"low: %d, hi: %d, migrants: %d, popsize: %d \n",low,hi,migrants,popsize);
-  fprintf(stderr,"is_low: %d, is_hi: %d, ie_low: %d, ie_hi: %d \n",is_low,is_hi, ie_low, ie_hi  );
-*/
-
-  treebuffer[0] = '\0'; // buffer string to fill with tree representations
-  for (i=0;i<migrants;i++)
-  { // loop over all migrants to output
-    boundary_loc = get_boundary(i_iofile, i, max_loc, migrants); 
-  
-    k = tournament_scsize2D(trees,score_vals,boundary_loc,max_loc,MIGTOUR, compgridsize);
-
-#ifdef CHECK_MIG_STABILITY
-    /* check time step stability to export only stable trees */
-    error = get_score(ffs, result, obs, I, trees[k], ffs0, ffs1, obs0,obs1,aspect, S_init_array, ts_factor*4, startscore_i);
-    if (fabs(score_vals[k]-error)>5.0)
+    if (i<INTPARS-1)
     {
-      score_vals[k] = 1e19;
+      sprintf(tmp_str,",");
+      strcat(treebuffer,  tmp_str ); 
     }
-    else
-    {
-#endif
-#ifdef CHECK_MIG_IC_STABILITY
-      handle_S_init(4000.0, obs, obs1, S_init_array2); /* stability test w.r.t. i.c.*/
-      error = get_score(ffs, result, obs, I, trees[k], ffs0, ffs1, obs0,obs1,aspect, S_init_array2, ts_factor, startscore_i);
- /*     fprintf(stderr,"TESTING: %g vs %g. S_init0: %g, S_init1: %g ",error,score_vals[k],S_init_array2[0],S_init_array2[1]); */
+  }
 
-      if (fabs(score_vals[k]-error)>10.0)
-      {
-        score_vals[k] = (fabs(score_vals[k]-error)*score_vals[k])/5.0; 
-      }
-#endif
-
-      /* add strings containing score and tree in bracket notation to treebuffer string */
-      /* add score output_score */
-      sprintf(tmp_str,"%g",score_vals[k]);
-      strcat(treebuffer,  tmp_str );
-      strcat(treebuffer,  delims );
-
-      /* add tree */
-      (*code2str_table[(int) trees[k]->op])(trees[k],tmp_str); /* convert tree to string */
-      strcat(treebuffer,  tmp_str );
-      strcat(treebuffer,  delims  );  
-#ifdef CHECK_MIG_STABILITY
-    }
-#endif
-
-  } // end migrants loop  
+  sprintf(tmp_str,")");
+  strcat(treebuffer,  tmp_str ); 
 
   return 0;
 }
 
 
-int readmigrants(char * infiles[],int i_iofile, Node *trees[], double *score_vals, Point max_loc, int migrants, int compgridsize, int tour )
+int NodeScore2bufferline(NodeScore ns, char treebuffer[] )
 {
-/* fill an array of tree structure pointers by translating text tree representations to structures  
+  /* add string containing score and tree in bracket notation to treebuffer string */
+
+  char tmp_str[MAXTREESTR];
+  const char hor_delim[2] = " ";
+
+  /* add score output_score */
+  sprintf(tmp_str,"%.10g", ns.score); // print score value into string
+  strcat(treebuffer,  tmp_str ); // add string to treebuffer string
+  strcat(treebuffer,  hor_delim ); // add space
+
+
+#if INTPARS > 0
+  int_pars2bufferline(ns, treebuffer, ns.ip);
+  strcat(treebuffer,  hor_delim ); 
+#endif
+
+#ifdef EVOLVEIC
+  state2bufferline(treebuffer, ns.S_i);
+  strcat(treebuffer,  hor_delim ); 
+#endif
+
+  /* add tree */
+  (*code2str_table[(int) ns.node->op])(ns.node,tmp_str); /* convert tree to string */
+  strcat(treebuffer,  tmp_str );  // add string to treebuffer string
+  strcat(treebuffer,  "\n"  );  // add \n
+
+  return 0;
+}
+
+
+int migrants2buffer(Population pop, int i_iofile , int migrants ,int compgridsize, Experiment Exp, Point my_loc_external )
+{
+/* creates output file with spatially ordered list of trees, depending on the direction of the output file.
+
+  j: output direction (1-4: xm,xp,ym,yp)
+
+  File IO not included. Works on string buffer treebuffer.
+
+*/
+
+  Point boundary_loc; // used to locate trees within grid
+
+  int i,k;
+
+#if defined (CHECK_MIG_STABILITY)
+  double error;
+#endif
+
+  init_buffer(); // buffer string to fill with tree representations
+
+
+#if COMPARTMENTS > 0 
+
+  if ( ( (mod(my_loc_external.x,COMPARTMENTS) == 0) && (i_iofile == 1) ) ||
+       ( (mod(my_loc_external.x,COMPARTMENTS) == 1) && (i_iofile == 0) ) ||
+       ( (mod(my_loc_external.y,COMPARTMENTS) == 0) && (i_iofile == 3) ) ||
+       ( (mod(my_loc_external.y,COMPARTMENTS) == 1) && (i_iofile == 2) ) )
+
+  {  // modified exchange towards x+1
+
+    for (i=0;i<migrants/16;i++)
+    { // loop over all migrants to output
+
+      boundary_loc = get_boundary(i_iofile, i, pop.max_loc, migrants); // internal cell boundary
+
+      k = tournament_size2D(pop,boundary_loc,MIGTOUR, compgridsize);
+ 
+ 
+#ifdef CHECK_MIG_STABILITY
+    /* check time step stability to export only stable trees */
+      error = get_score(pop.pop[k].node, Exp.S_i, Exp);
+      if (fabs(pop.pop[k].score-error)>5.0)
+      {
+        pop.pop[k].score = 1e19;
+      }
+      else
+      {
+#endif
+      /* add strings containing score and tree in bracket notation to treebuffer string */
+
+        NodeScore2bufferline(pop.pop[k], treebuffer );
+
+#ifdef CHECK_MIG_STABILITY
+      }
+#endif
+
+    } // end migrants loop  
+
+  }
+  else
+  {
+
+    for (i=0;i<migrants;i++)
+    { // loop over all migrants to output
+
+      boundary_loc = get_boundary(i_iofile, i, pop.max_loc, migrants); // internal cell boundary
+
+      k = tournament_scsize2D(pop,boundary_loc,MIGTOUR, compgridsize);
+
+#ifdef CHECK_MIG_STABILITY
+    /* check time step stability to export only stable trees */
+      error = get_score(pop.pop[k].node, Exp.S_i, Exp);
+      if (fabs(pop.pop[k].score-error)>5.0)
+      {
+        pop.pop[k].score = 1e19;
+      }
+      else
+      {
+#endif
+      /* add strings containing score and tree in bracket notation to treebuffer string */
+
+        NodeScore2bufferline(pop.pop[k], treebuffer );
+
+#ifdef CHECK_MIG_STABILITY
+      }
+#endif
+
+    } // end migrants loop  
+
+  }
+
+
+#else
+
+
+  for (i=0;i<migrants;i++)
+  { // loop over all migrants to output
+
+    boundary_loc = get_boundary(i_iofile, i, pop.max_loc, migrants); // internal cell boundary
+
+    k = tournament_scsize2D(pop,boundary_loc,MIGTOUR, compgridsize);
+ 
+ 
+#ifdef CHECK_MIG_STABILITY
+    /* check time step stability to export only stable trees */
+    error = get_score(pop.pop[k].node, Exp.S_i, Exp);
+    if (fabs(pop.pop[k].score-error)>5.0)
+    {
+      pop.pop[k].score = 1e19;
+    }
+    else
+    {
+#endif
+      /* add strings containing score and tree in bracket notation to treebuffer string */
+
+      NodeScore2bufferline(pop.pop[k], treebuffer );
+
+#ifdef CHECK_MIG_STABILITY
+    }
+#endif
+
+  } // end migrants loop  
+#endif
+
+
+
+
+  return 0;
+}
+
+int numbers_dot_only(const char *s)
+{
+  char *valid_chars = ".e+-";
+
+    while (*s) {
+
+        if ((isdigit(*s) == 0) && ( strchr(valid_chars, *s) == NULL  ))
+          return 0; // signals it's not a number
+
+        s++;
+    }
+
+    return 1; // signals it's a number
+}
+
+double my_strtod(const char *token)
+{
+
+  double tmp_score;
+
+  if (  numbers_dot_only(token) == 0 ) // separate check for garbled number (containing chars not number or .)
+  {
+    fprintf(stderr,"Error reading file: non-numerical string for score detected: %s. \n",token);
+    return -1.0; /* abort and trigger failure. */          
+  }
+
+
+  tmp_score = strtod(token,NULL);
+
+  if (tmp_score == 0.0) // indicates atof failed
+  {
+    fprintf(stderr,"Error reading file: could not convert float \n");
+    return 0.0; /* abort and trigger failure. */          
+  }
+
+  return tmp_score;
+
+}
+
+
+NodeScore bufferline2NodeScore(char tmp_str[], char * infile)
+{ /* read NodeScore from a line in the buffer 
+     argument tmp_str is buffer line 
+     infile argument used for error reporting only */
+
+
+  double tmp_score;
+
+  const char hor_delim[2] = " ";
+  char *token;  
+  char *token_wrong;  
+  char *pos;
+
+  NodeScore ns;
+
+#if INTPARS > 0
+  IntPars ip;
+#endif
+
+#ifdef EVOLVEIC
+  State S;
+#endif
+
+  ns.score = 1e19;
+  ns.node = NULL;
+  
+  token = strtok(tmp_str,hor_delim);   
+
+  tmp_score = my_strtod(token);
+
+  if (tmp_score <= 0.0) // indicates string to double conversion failed
+  {
+    //fprintf(stderr,"Error reading file: could not convert float \n");
+    return ns; /* abort and trigger failure via ns values */          
+  }
+
+  if (tmp_score < MIN_SCORE) // separate check for implausible values
+  {
+    fprintf(stderr,"Error reading file: implausibly low score detected. \n");
+    return ns; /* abort and trigger failure via ns values */          
+  }
+
+
+#if INTPARS > 0
+  token = strtok(NULL,hor_delim);
+  if (token != NULL) 
+  {
+    ip = str2int_pars(token);
+       
+    if (ip.data == NULL)
+    {
+      fprintf(stderr,"Error reading state. \n");
+      return ns; /* abort and trigger failure via ns values */         
+    }
+  }
+  else
+  { 
+    fprintf(stderr,"Error in reading file %s (wrong format?). \n",infile);   
+    /* abort and trigger failure via ns values */       
+  }  
+#endif
+
+#ifdef EVOLVEIC
+  token = strtok(NULL,hor_delim);
+  if (token != NULL) 
+  {
+    S = str2state(token);
+       
+    if (S.data == NULL)
+    {
+      fprintf(stderr,"Error reading state. \n");
+      return ns; /* abort and trigger failure via ns values */         
+    }
+  }
+  else
+  { 
+    fprintf(stderr,"Error in reading file %s (wrong format?). \n",infile);   
+    /* abort and trigger failure via ns values */       
+  }  
+#endif
+
+  
+  token = strtok(NULL,hor_delim);
+  if (token != NULL) 
+  {
+
+//    fprintf(stderr,"%s \n",token);
+
+    token_wrong = strtok(NULL,hor_delim);  // is there anything else on the line?
+    if (token_wrong != NULL)  // if so, error
+    {
+      fprintf(stderr,"Error reading file: to many items on line \n");
+      return ns; /* abort and trigger failure via ns values */      
+    }
+
+
+    // file reading checks
+    if (( token[0] == '\n' ) || ( token[0] == '\0' )) // empty line? this can't be an empty line
+    {
+      fprintf(stderr,"Error reading file: empty line \n");
+      return ns; /* abort and trigger failure via ns values */
+    }
+
+    if ((check_brackets(token,'(') == -1) || (check_brackets(token,'[') == -1) )  // brackets wrong? bracket tree integrity check
+    {
+      fprintf(stderr,"Error reading file: bracket tree integrity check failed for %s \n",token);
+      return ns; /* abort and trigger failure via ns values */
+    }
+    // end integrity checks
+
+    if ( (pos=strchr(token,'\n')) != NULL)
+      *pos = '\0';
+
+    ns.score = tmp_score;
+    ns.node = str2node(token,'(',',');
+
+#ifdef EVOLVEIC
+    ns.S_i = S;
+#endif
+
+#if INTPARS > 0
+    ns.ip = ip;
+#endif
+
+    if (check_node(ns.node) == 1) /* tree integrity check after translation to node */
+    {
+      fprintf(stderr,"Triggering abort from bufferline2NodeScore \n");
+      ns.score=1e19;
+      ns.node=NULL; /* abort and trigger failure */
+      return ns;   
+    }
+  }
+  else
+  { /* if there's no tree after the line with a score, trigger failure */
+    fprintf(stderr,"Error in reading file %s (wrong format?). \n",infile);   
+    /* abort and trigger failure via ns values */       
+  }
+
+  return ns;
+}
+
+
+
+
+int readmigrants(Migr mig,int i_iofile, Population pop, int migrants, int compgridsize, int tour )
+{
+/* fill an array of tree structure pointers *trees[] by translating text tree representations (from file) to structures  
 
    arg "migrants" is the number of migrants expected, used for location in tree placement on boundary. This function will read as many migrant trees as are available in the file. 
 
@@ -2601,261 +1803,121 @@ int readmigrants(char * infiles[],int i_iofile, Node *trees[], double *score_val
 
    This function sometimes fails due to file corruption. At the moment, this can lead to corrupted trees entering the population, possibly with P/ C nodes with parents other than V nodes. floating point exceptions have been observed in conjunction with file reading errors. Possible fixes include a tree vetting function.
 
+   Includes file IO
+
    opposite of migrants2buffer
 */
 
+  int i, i_tour;
   Point boundary_loc;
+  NodeScore ns;
 
   char tmp_str[MAXTREESTR];
-  int i, i_tour;
-  double tmp_score;
   
   i=0; // counts the migrant trees
 
-  fp = fopen(infiles[i_iofile],"r");
+  FILE *fp;
+
+  fp = fopen(mig.infiles + i_iofile*FNAMESIZE,"r");  // file pointer fp
   if (fp != NULL)
   {
-    while((fgets (tmp_str,MAXTREESTR,fp)!=NULL ) && (i<MAXTREES)  )
+    while((fgets (tmp_str,MAXTREESTR,fp)!=NULL ) && (i<migrants)  )  // read line by line from file
     {
-      strtok(tmp_str,"\n");   
-      tmp_score = atof(tmp_str);
+      ns = bufferline2NodeScore(tmp_str,mig.infiles + i_iofile*FNAMESIZE); // convert to NodeScore, file arg only for error reporting 
 
-      if (fgets (tmp_str,MAXTREESTR,fp) != NULL) /* there should be a tree on the line after a score*/
+      if (ns.node == NULL)
       {
-
-        // file reading checks
-        if (( tmp_str[0] == '\n' ) || ( tmp_str[0] == '\0' ))
-        {
-          fprintf(stderr,"Error reading mig file: empty line \n");
-          i=-1; /* abort and trigger failure */
-          break;
-        }
-     
-        if (check_brackets(tmp_str) == -1)
-        {
-          fprintf(stderr,"Error reading mig file: bracket tree integrity check failed for %s \n",tmp_str);
-          i=-1; /* abort and trigger failure */
-          break;
-        }
-        // end integrity checks
-
-
-        strtok(tmp_str,"\n");   
-
-        // choose point inside boundary around which to insert migrants that were read, depending on direction of origin (l,r,u,d)
-        boundary_loc = get_boundary(i_iofile, i , max_loc, migrants); 
-
-        // tournament replace trees in appropriate boundary
-        // i_tour index of tree to be replaced by migrant
-        i_tour = reverse_tour_size2D(trees,score_vals,boundary_loc, max_loc, tour, compgridsize);
-
-
-        free_node(trees[i_tour]); /* Note: free_node checks for NULL, no need to do it here */
-
-        score_vals[i_tour] = tmp_score;
-        trees[i_tour] = str2node(tmp_str);
-        if (check_node(trees[i_tour]) == 1) /* tree integrity check */
-        {
-          i = -1; /* abort and trigger failure */
-          break;
-        }
-        i++;
-      }
-      else
-      { /* if there's no tree after the line with a score, trigger failure */
-        fprintf(stderr,"Error in reading migrant file %s (wrong format?). \n",infiles[i_iofile]);   
-        i = -1; /* abort and trigger failure */
+        i = -1;
         break;
       }
+      i++;
+      boundary_loc = get_boundary(i_iofile, i , pop.max_loc, migrants);
+      i_tour = reverse_tour_scsize2D(pop,boundary_loc, tour, compgridsize);
+
+      free_node_score(pop.pop[i_tour]); /* This tree will be replaced. Note: free_node checks for NULL, no need to do it here */
+      pop.pop[i_tour] = ns;
+ 
     }
 
     fclose(fp);
+
+#if COMPARTMENTS == 0
+    if (i<migrants)
+    {
+      fprintf(stderr,"Not enough lines in file %s. \n", mig.infiles + i_iofile*FNAMESIZE);
+      return -1;
+    }
+#endif
  
     return i;
   }
-  
+//  fprintf(stderr,"Warning: cannot open %s\n",mig.infiles + i_iofile*FNAMESIZE);
   return(-2); /* can't open file, not a big problem */
 }
 
 
-int readmigrants_buffered(const char *filepath, Node *trees[], double *score_vals, int low, int hi , int popsize, int compgridsize, int tour)
+
+
+
+
+
+int pop2buffer(Population pop)
 {
-/* fill an array of tree structure pointers by translating text tree representations to structures  
+/* fill the buffer with scores and text representations of tree structures from an array 
 
-   Produces warning to stderr when file reading error occurs.
-
-   This function sometimes fails due to file corruption. At the moment, this can lead to corrupted trees entering the population, possibly with P/ C nodes with parents other than V nodes. floating point exceptions have been observed in conjunction with file reading errors. Possible fixes include a tree vetting function.
-
-   opposite of trees2buffer
-*/
-
-  Node *nodes_buffer[MAXTREES+5]; /* can we allocate a smaller amount?? */
-  double scores[MAXTREES+5];
-
-  int * bound_low;
-  int * bound_hi;
-
-  char tmp_str[MAXTREESTR];
-  int i, num_trees;
-  int i_tour=0;
-  double tmp_score;
-
-  
-  bound_low = mapsector(low,popsize);
-  bound_hi = mapsector(hi,popsize);
-
-  i=0;
-  fp = fopen(filepath,"r");
-  if (fp != NULL)
-  {
-    while((fgets (tmp_str,MAXTREESTR,fp)!=NULL ) && (i<MAXTREES)  )
-    {
-      strtok(tmp_str,"\n");   
-      tmp_score = atof(tmp_str);
-
-      if (fgets (tmp_str,MAXTREESTR,fp) != NULL)
-      {
-        strtok(tmp_str,"\n");   
-
-        scores[i] = tmp_score;
-        nodes_buffer[i] = str2node(tmp_str);
-        if (check_node(nodes_buffer[i]) == 1) /* tree integrity check */
-        {
-          i = -1; /* abort and trigger failure */
-          break;
-        }
-
-        i++;
-      }
-      else
-      {
-        fprintf(stderr,"Error in reading migrant file %s (wrong format?). \n",filepath);   
-        i=-1; /* abort and trigger failure */
-        break;
-      }
-    }
-
-    if (i>-1)
-    { /* tree reading succesful, now introduce buffer trees into population via tournament */
-      num_trees = i; /* previous while loop read this many trees */
-
-      fprintf(stderr,"yo: %d \n",num_trees);
-     
-      for (i=0;i<num_trees;i++)
-      {     
-
-        if (i%2==0)
-        {
-          i_tour = reverse_tour_size(trees,score_vals,bound_low[0], bound_low[1]-bound_low[0], tour);
-        }
-        else
-        {
-          i_tour = reverse_tour_size(trees,score_vals,bound_hi[0], bound_hi[1]-bound_hi[0], tour);
-        }
-
-        fprintf(stderr,"i_tour %d \n",i_tour);
-        free_node(trees[i_tour]); /* remove old tree (note: free_node checks for NULL) */
-
-        score_vals[i_tour] = scores[i];
-        trees[i_tour] = nodes_buffer[i];
-        fprintf(stderr,"after\n");
-
-      }
-    }
-
-    fclose(fp);
-    free(bound_low);
-    free(bound_hi);
-    return i;
-  }
-
-  free(bound_low);
-  free(bound_hi);
-  return(-2);
-}
-
-
-
-int trees2buffer(Node *trees[],int popsize)
-{
-/* fill the buffer with text representations of tree structures from an array 
-
-   opposite of buffer2trees
 */
   int i;
-  char tmp_str[MAXTREESTR];
 
-  treebuffer[0] = '\0';
-  for (i=0;i<popsize;i++)
+  init_buffer();
+  for (i=0;i<pop.popsize;i++)
   {
-    (*code2str_table[(int) trees[i]->op])(trees[i],tmp_str);
-
-    strcat(treebuffer,  tmp_str );
-    strcat(treebuffer,  delims  );  
+  //  fprintf(stderr,"%d ",i);
+    NodeScore2bufferline(*(pop.pop+i), treebuffer ); // write line to buffer. Same call as from migrants2buffer
   }  
   return 0;
 }
 
-int buffer2trees(Node *trees[])
-{
-/* fill an array of tree structure pointers by translating text tree representations to structures  
 
-   opposite of trees2buffer
-*/
 
-  int i=0;
-  char * pch;
-  char tmp_str[MAXTREESTR];
-  
-  pch = strtok(treebuffer,delims);
-  while ( pch != NULL)
-  {
-    strcpy(tmp_str,pch);
-    trees[i] = str2node(tmp_str);  
-    pch = strtok(NULL, delims);
-    i++;
-  };
-  return 0;
-}
 
-void store_data(const char *filepath,const char *data, char *mode)
-{
-/* add return value in future */
-
-  fp = fopen(filepath,mode);
-
-  if (fp != NULL)
-  {
-    fprintf(fp,"%s",data);
-    fclose(fp);
-  }
-}
-
-int check_brackets(char *tmp_str)
+int check_brackets(char *tmp_str, char left_bracket)
 {
   int i=0;
   int b=0;
   int t=0;
 
+  char right_bracket = find_right_bracket(left_bracket);
+
+//  int l = strlen(tmp_str);
+
+
   while (tmp_str[i] != '\0')
   {
-    if (tmp_str[i] == '(')
+ 
+    if (tmp_str[i] == left_bracket)
     {
       b++;
       t++;
     }
-    else if (tmp_str[i] == ')')
+    else if (tmp_str[i] == right_bracket)
     {
       b--;
       t++;
     }
+    else if ( tmp_str[i] == ' '  )
+    {
+      fprintf(stderr,"Error: tree str cannot contain spaces");
+      return -1;    
+    }
+
     i++;
   }
-  if ((t==0) || (b!=0)) 
+  if (b!=0) 
   {
     return -1;
   }
-  return 0;   
+
+  return t;   
 }
 
 int check_ascii(char *tmp_str)
@@ -2879,6 +1941,8 @@ int read_data(const char *filepath,Node *trees[],int maxtrees)
   char tmp_str[MAXTREESTR];
   int i=0;
 
+  FILE *fp;
+
   fp = fopen(filepath,"r");
   if (fp != NULL)
   {
@@ -2891,7 +1955,7 @@ int read_data(const char *filepath,Node *trees[],int maxtrees)
         break;
       }
      
-      if (check_brackets(tmp_str) == -1)
+      if ((check_brackets(tmp_str,'(') == -1) || (check_brackets(tmp_str,'[') == -1) )
       {
         fprintf(stderr,"Error reading pop: bracket tree integrity check failed for %s \n",tmp_str);
         i=-1; /* abort and trigger failure */
@@ -2899,14 +1963,13 @@ int read_data(const char *filepath,Node *trees[],int maxtrees)
       }
 
       strtok(tmp_str,"\n");
-      trees[i] = str2node(tmp_str);
+      trees[i] = str2node(tmp_str,'(',',');
       if (check_node(trees[i]) == 1)
       {
         fprintf(stderr,"Error reading pop: tree integrity check failed.");
         i=-1; /* abort and trigger failure */
         break;
       }
-
       i++;
     }
 
@@ -2916,300 +1979,59 @@ int read_data(const char *filepath,Node *trees[],int maxtrees)
   return(-2); /* signal file failure */
 }
 
-double score_fun_mag(int startscore_i,int obs0,int obs1,double *obs, long* I, double* result, double magnification)
+
+
+
+int read_pop(char *filepath,Population pop)
 {
-  int j;
-  double error, tmp_error0;
 
-  double upper_bound, lower_bound;
+  int i;
+  NodeScore ns;
 
-  lower_bound = -1.0;
+  char tmp_str[MAXTREESTR];
 
-  error = 0;
-  for (j=startscore_i;j<obs0;j++)
-  {      
+  i=0; // counts the trees
 
-    if (j-startscore_i < 220)
+  FILE *fp;
+
+  fp = fopen(filepath,"r");  // file pointer fp
+  if (fp != NULL)
+  {
+    while((fgets (tmp_str,MAXTREESTR,fp)!=NULL ) && (i<pop.popsize)  )  // read line by line from file
     {
-      upper_bound = 0.1;
-    }
-    else
-    {
-      upper_bound = 0.5;
-    }
+      ns = bufferline2NodeScore(tmp_str,filepath); // convert to NodeScore, file arg only for error reporting 
 
-    tmp_error0 = obs[j*obs1] - result[I[j]*SPACEDIM];
-
-    if ( ( (obs[j*obs1] > upper_bound) && (result[I[j]]<upper_bound) ) ||  ( (obs[j*obs1] < lower_bound) && (result[I[j]]>lower_bound) )  ){
-      tmp_error0 *= magnification; 
-    }
-
-    error += tmp_error0*tmp_error0;
-  }
-  
-  return error;
-}
-
-double score_fun_basic(int startscore_i,int obs0,int obs1,double *obs, long* I, double* result)
-{
-  int j,k;
-  double error, tmp_error0;
- 
-  double weights[10];
-
-  weights[0] = 0.6;
-  weights[1] = 0.4; 
-  weights[2] = 0;
-  weights[3] = 0;
-  weights[4] = 0;
-
-  error = 0;
-
-  for (k=0;k<obs1;k++)  /* number of obs columns must not exceed SPACEDIM! */
-  {
-    for (j=startscore_i;j<obs0;j++)
-    {      
- /*   fprintf(stderr,"%g # ",obs[j*obs1+1]);  */
-
-      tmp_error0 = obs[j*obs1+k] - result[I[j]*SPACEDIM+k];
-      error += tmp_error0*tmp_error0*weights[k];
-    }
-  }
-
-  return 1000.0*error/(obs1*obs0);
-}
-
-double score_fun_pow4(int startscore_i,int obs0,int obs1,double *obs, long* I, double* result)
-{
-  int j,k;
-  double error, tmp_error0;
-
-  error = 0;
-
-  for (k=0;k<obs1;k++)  /* number of obs columns must not exceed SPACEDIM! */
-  {
-    for (j=startscore_i;j<obs0;j++)
-    {      
- /*   fprintf(stderr,"%g # ",obs[j*obs1+1]);  */
-
-      tmp_error0 = obs[j*obs1+k] - result[I[j]*SPACEDIM+k];
-      error += pow(1.25*tmp_error0,4);
-    }
-  }
-
-  return 1000.0*error/(obs1*obs0);
-}
-
-
-double score_fun_aspect(int startscore_i,int obs0,int obs1,double *obs, long* I, double* result, double aspect)
-{
-  int j;
-  double error, tmp_error0, tmp_error1;
-
-  error = 0;
-  for (j=startscore_i;j<obs0;j++)
-  {      
-
-    tmp_error0 = obs[j*obs1] - result[I[j]*SPACEDIM];
-    tmp_error1 = (obs[j*obs1+1]-(result[I[j]*SPACEDIM]-result[I[j-1]*SPACEDIM]))*aspect;
-
-    error += tmp_error0*tmp_error0 + tmp_error1*tmp_error1;
-  }
-
-  return error;
-}
-
-
-double get_score(double* ffs,double* result, double *obs, long* I, Node *newtree, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init,int ts_factor, int startscore_i)
-{
-  double error;
-
-/*  response_loop(ffs,result, newtree, ffs0, ffs1,S_init, ts_factor);  */
-
-  if (check_node(newtree) == 1)
-  {
-    return 1e19;
-  }
-
-  RK4(ffs,result, newtree, ffs0, ffs1,S_init, ts_factor);
-
-/*  fprintf(stderr,"yoyo %g\n",result[0]);
-*/
-
-  if (result[0] <1e18) 
-  {
-
-    if (aspect > 0)
-    {
-      error = score_fun_aspect( startscore_i, obs0, obs1, obs, I, result, aspect);
-    }
-    else
-    {
-      error = score_fun_basic( startscore_i, obs0, obs1, obs, I, result);
-    }
-/*    fprintf(stderr,"%f \n", sqrt(error));
-*/
-    return error;
-
-  }
-  else
-  {
-    return 1e19;
-  }
-  return 1e19;
-}
-
-int mutconsts(double *consts[],int size, double mutationrate)
-{
-  int k, k2;
-  double tmpval=0;
- 
-  if (size>0)
-  {
-    tmpval=rand();
-    if ( tmpval<0.1*mutationrate*RAND_MAX )
-    {
-      k2=rand()%size;
-
-      if (rand()%2 == 0)
+      if (check_node(ns.node) == 1) /* tree integrity check after translation to node */
       {
-        *consts[k2] =   randomdouble();
-      }
-      else
-      {
-        *consts[k2] =   randomdouble()*(*consts[k2]);
-      }
-
-
-      for (k=0;(k<size) && (k != k2);k++)
-      {
-        
-        *consts[k] =   (1.0+((double) (2*rand() -RAND_MAX) /RAND_MAX)*
-            RNDGRAIN)*(*consts[k]);
-      }  
-    }
-  }
-return 0;
-}
-
-
-double hillclimb(double* ffs, double* result,double*  obs,long*  I,Node *newtree, int ffs0, int ffs1, int obs0, int obs1, double *consts[] , int size, double error, double aspect, double* S_init, int ts_factor, int startscore_i)
-{
-  int k, km, oldkm, searches;
-  double minerror;
-
-  double delta[MAXCONSTS];
-  double oldpos[MAXCONSTS];
-
-  searches=0;
-
-  if (size>0)
-  {
-
-    if (size>MAXHILL)
-    {
-      size = MAXHILL;
-    }
-
-    oldkm=-1;       
-    for (k=0;k<size;k++)
-    {
-/*      delta[k] = (( (double) rand()  )/RAND_MAX)*pow(10,rand()%5-2); */
-
-      delta[k] = (*consts[k])*( 1.0 + (( (double) rand() )/RAND_MAX)*0.5)*RNDGRAIN;
-    }
-
-    while(searches<MAXSEARCH)
-    {
-      km=0;
-      minerror=error;
-      for (k=0;k<size;k++)
-      {
-        oldpos[k] = *consts[k];  
-        if (k != -oldkm)
-        {
-          (*consts[k]) = oldpos[k]+delta[k];
-          error = get_score(ffs, result, obs, I, newtree, ffs0, ffs1, obs0, obs1,aspect, S_init, ts_factor, startscore_i);
-          if (error < minerror-HILLTHRESH)
-          {
-            km=k;
-            minerror=error;
-          }
-          (*consts[k]) = oldpos[k];
-        }  
-        else if (k != oldkm)
-        {      
-          (*consts[k]) = oldpos[k]-delta[k];
-          error = get_score(ffs, result, obs, I, newtree, ffs0, ffs1, obs0, obs1,aspect, S_init, ts_factor, startscore_i);
-          if (error < minerror-HILLTHRESH)
-          {
-            km=-k;
-            minerror=error;
-          }
-                  (*consts[k]) = oldpos[k];
-        }
-      }
-      if (km == 0)
-      {
+        i = -1;
         break;
       }
-      else
-      {
-        if (km>0)
-        {
-          (*consts[km]) = oldpos[km]+delta[km];
-        }
-        else
-        {
-          (*consts[-km]) = oldpos[-km]-delta[-km];
-        }
-        error = minerror;
-        oldkm = km;
-      }
-      searches++;
-    }  
-  }
 
-  nhillsearches += searches;
-  return error;
-}
-
-
-int sectortour(double *score_vals,int popsize,int tour, int sector, int adjacent[])
-{
-/* tournament selection by sector, with process-internal migration. returns index of chosen tree
-*/
-
-  int * bound;
-  int kmin=0;
-
-  if (rand()<2*MIGRATE*RAND_MAX)
-  {
-    if (rand()%2==0)
-    {
-      bound = mapsector(adjacent[sector],popsize);
-      kmin = tournament(score_vals, bound[0],bound[1]-bound[0],tour);
+      pop.pop[i] = ns;
+      i++;
     }
-    else
-    {
-      bound = mapsector(adjacent[sector+4],popsize);
-      kmin = tournament(score_vals, bound[0],bound[1]-bound[0],tour);
-    }
-  }
-  else
-  {   
-    bound = mapsector(sector,popsize);
-    kmin = tournament(score_vals, bound[0],bound[1]-bound[0],tour);      
 
-  }
+    fclose(fp);
  
-  free(bound);
+    if (i<pop.popsize)
+    {
+      fprintf(stderr,"Not enough lines in %s. \n",filepath);
+      return -1;
+    }
 
-  return kmin;
+    return i;
+  }
+  
+  return(-2); /* can't open file. */
 }
 
 
-int tournament_size(Node *trees[], int is,int popsize,int tour)
+
+
+
+
+
+int tournament_size(Population pop, int is,int tour)
 {
 /* tournament selection on size alone. returns index of chosen tree
 */
@@ -3221,9 +2043,10 @@ int tournament_size(Node *trees[], int is,int popsize,int tour)
 
   for (i=0;i<tour;i++)
   {
-    k = is + rand()%popsize; /* choose population wide within segment is to is+popsize */
+    k = is + rand()%pop.popsize; /* choose population wide within segment is to is+popsize */
 
-    leafcount = conparcount(trees[k], current);
+    leafcount = conparcount(pop.pop[k].node, current);
+
     *current = 0; /* always reset after use */
     if ( leafcount < M )
     {
@@ -3238,7 +2061,7 @@ int tournament_size(Node *trees[], int is,int popsize,int tour)
 
 
 
-int tournament_scsize(Node *trees[],double *score_vals, int is,int popsize,int tour)
+int tournament_scsize(Population pop, int is,int tour)
 {
 /* tournament selection based on score and tree size
 */
@@ -3254,20 +2077,17 @@ int tournament_scsize(Node *trees[],double *score_vals, int is,int popsize,int t
     l=0;
     do
     { /* look for a tree with leaves between 2 and MAXLEAF and try no more than 10 times */
-      k = is + rand()%popsize; /* choose population wide in segment is to is+popsize*/
-      leafcount = conparcount(trees[k], current);
+      k = is + rand()%pop.popsize; /* choose population wide in segment is to is+popsize*/
+      leafcount = conparcount(pop.pop[k].node, current);
       *current = 0;  /* always reset leafcount current afterwards */
       l++;
     }while( ( (leafcount < 2) || (leafcount > MAXLEAF) ) && (l<10) );
 
-    if ( ( sizescore = ( score_vals[k] + 2*PARSIMONY*( (double) leafcount) )  ) < M)  
+    if ( ( sizescore = ( pop.pop[k].score + 2*PARSIMONY*( (double) leafcount) )  ) < M)  
     { /* find the minimum value over the tournament */
       M = sizescore;
       kmin = k;
     }
-/*    fprintf(stderr,"score: %f, parsimony: %f \n",score_vals[k],PARSIMONY*( (double) leafcount) ); 
-*/
-
   }
   free(current);
 
@@ -3277,7 +2097,7 @@ int tournament_scsize(Node *trees[],double *score_vals, int is,int popsize,int t
 
 
 
-int reverse_tour_size(Node *trees[],double *score_vals, int is,int popsize,int tour)
+int reverse_tour_size(Population pop, int is,int tour)
 {
 /* tournament selection on size and score, seeking maximum values. Used for tree elimination in migration.
 */
@@ -3290,13 +2110,12 @@ int reverse_tour_size(Node *trees[],double *score_vals, int is,int popsize,int t
 
   for (i=0;i<tour;i++)
   {
-    k = is + rand()%popsize; /* choose population wide inside segment is to is+ popsize */
+    k = is + rand()%pop.popsize; /* choose population wide inside segment is to is+ popsize */
 
-    leafcount = conparcount(trees[k], current); /* calculate number of consts and pars (leaves) */
+    leafcount = conparcount(pop.pop[k].node, current); /* calculate number of consts and pars (leaves) */
     *current = 0;      /* always reset leafcount current afterwards */
 
-/*    if ( ( sizescore = score_vals[k]*( (double) leafcount) ) > M)   */
-    if ( ( sizescore = ( score_vals[k] + 2*PARSIMONY*( (double) leafcount) )  ) > M) 
+    if ( ( sizescore = ( pop.pop[k].score + 2*PARSIMONY*( (double) leafcount) )  ) > M) 
     { /* calculate maximum sizescore */
       M = sizescore;
       kmax = k;
@@ -3311,7 +2130,7 @@ int reverse_tour_size(Node *trees[],double *score_vals, int is,int popsize,int t
 
 
 
-int tournament(double *score_vals, int is,int popsize,int tour)
+int tournament(Population pop, int is,int tour)
 {
 /* tournament selection
 */
@@ -3321,11 +2140,11 @@ int tournament(double *score_vals, int is,int popsize,int tour)
 
   for (i=0;i<tour;i++)
   {
-    k = is + rand()%popsize; /* choose population wide */
+    k = is + rand()%pop.popsize; /* choose population wide */
 
-    if (score_vals[k] < M)
+    if (pop.pop[k].score < M)
     {
-      M = score_vals[k];
+      M = pop.pop[k].score;
       kmin = k;
     }
   }
@@ -3429,7 +2248,7 @@ int rnd_in_area_point(Point my_loc, Point max_loc , int compgridsize)
 }
 
 
-int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour, int compgridsize)
+int tournament_scsize2D(Population pop, Point my_loc,int tour, int compgridsize)
 {
 /* tournament selection based on score and tree size
 */
@@ -3447,31 +2266,110 @@ int tournament_scsize2D(Node *trees[],double *score_vals, Point my_loc,Point max
     { /* look for a tree with leaves between 2 and MAXLEAF and try no more than 10 times */
 
 #ifdef EXPLICITMIG
-      k = rnd_in_area_point(my_loc, max_loc , compgridsize);
+      k = rnd_in_area_point(my_loc, pop.max_loc , compgridsize);
 #else
-      k = pick_random_neighbor_point(my_loc, max_loc , compgridsize);
+      k = pick_random_neighbor_point(my_loc, pop.max_loc , compgridsize);
 #endif
 
-      leafcount = conparcount(trees[k], current);
+      leafcount = conparcount(pop.pop[k].node, current);
       *current = 0;  /* always reset leafcount current afterwards */
       l++;
     }while( ( (leafcount < 2) || (leafcount > MAXLEAF) ) && (l<10) );
 
-    if ( ( sizescore = ( score_vals[k] + 2*PARSIMONY*( (double) leafcount) )  ) < M)  
+    if ( ( sizescore = ( pop.pop[k].score + MIGPARSFACT*PARSIMONY*( (double) leafcount) )  ) < M)  
     { /* find the minimum value over the tournament */
       M = sizescore;
       kmin = k;
     }
-/*    fprintf(stderr,"score: %f, parsimony: %f \n",score_vals[k],PARSIMONY*( (double) leafcount) ); 
-*/
-
   }
   free(current);
 
   return kmin;
 }
 
-int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max_loc,int tour, int compgridsize)
+
+int tournament_size2D(Population pop, Point my_loc,int tour, int compgridsize)
+{
+/* tournament selection based on score and tree size
+*/
+  int i,k,l,leafcount;
+  int kmin=0;
+  int M=100000;  /* minimum value of leafcount */
+
+  int *current = make_int(0);
+
+  for (i=0;i<tour;i++)
+  {
+    l=0;
+    do
+    { /* look for a tree with leaves between 2 and MAXLEAF and try no more than 10 times */
+
+#ifdef EXPLICITMIG
+      k = rnd_in_area_point(my_loc, pop.max_loc , compgridsize);
+#else
+      k = pick_random_neighbor_point(my_loc, pop.max_loc , compgridsize);
+#endif
+
+      leafcount = conparcount(pop.pop[k].node, current);
+
+      *current = 0;  /* always reset leafcount current afterwards */
+      l++;
+    }while( ( (leafcount < 2) || (leafcount > MAXLEAF) ) && (l<10) );
+
+    if ( leafcount < M)  
+    { /* find the minimum value over the tournament */
+      M = leafcount;
+      kmin = k;
+    }
+  }
+
+  free(current);
+
+  return kmin;
+}
+
+int reverse_tour_scsize2D(Population pop, Point my_loc,int tour, int compgridsize)
+{
+/* tournament selection based on score and tree size
+*/
+  int i,k,l,leafcount;
+  int kmax=0;
+  double M=0;  /* minimum value of leafcount */
+  double sizescore; /* amalgemation of size and score */
+
+  int *current = make_int(0);
+
+  for (i=0;i<tour;i++)
+  {
+    l=0;
+    do
+    { /* look for a tree with leaves between 2 and MAXLEAF and try no more than 10 times */
+
+#ifdef EXPLICITMIG
+      k = rnd_in_area_point(my_loc, pop.max_loc , compgridsize);
+#else
+      k = pick_random_neighbor_point(my_loc, pop.max_loc , compgridsize);
+#endif
+
+      leafcount = conparcount(pop.pop[k].node, current);
+      *current = 0;  /* always reset leafcount current afterwards */
+      l++;
+    }while( ( (leafcount < 2) || (leafcount > MAXLEAF) ) && (l<10) );
+
+    if ( ( sizescore = ( pop.pop[k].score + MIGPARSFACT*PARSIMONY*( (double) leafcount) )  ) > M)  
+    { /* find the minimum value over the tournament */
+      M = sizescore;
+      kmax = k;
+    }
+  }
+  free(current);
+
+  return kmax;
+}
+
+
+
+int reverse_tour_size2D(Population pop, Point my_loc,int tour, int compgridsize)
 {
 /* tournament selection on size and score, seeking maximum values. Used for tree elimination in migration.
    selection takes place around Point my_loc
@@ -3487,16 +2385,16 @@ int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max
   for (i=0;i<tour;i++)
   {
 #ifdef EXPLICITMIG
-    k = rnd_in_area_point(my_loc, max_loc , compgridsize);
+    k = rnd_in_area_point(my_loc, pop.max_loc , compgridsize);
 #else
-    k = pick_random_neighbor_point(my_loc, max_loc , compgridsize);
+    k = pick_random_neighbor_point(my_loc, pop.max_loc , compgridsize);
 #endif
 
-    leafcount = conparcount(trees[k], current); /* calculate number of consts and pars (leaves) */
+    leafcount = conparcount(pop.pop[k].node, current); /* calculate number of consts and pars (leaves) */
     *current = 0;      /* always reset leafcount current afterwards */
 
-/*    if ( ( sizescore = score_vals[k]*( (double) leafcount) ) > M)   */
-    if ( ( sizescore = ( score_vals[k] + 2*PARSIMONY*( (double) leafcount) )  ) > M) 
+/*    if ( ( sizescore = pop.pop[k].score*( (double) leafcount) ) > M)   */
+    if ( ( sizescore = ( pop.pop[k].score + 2*PARSIMONY*( (double) leafcount) )  ) > M) 
     { /* calculate maximum sizescore */
       M = sizescore;
       kmax = k;
@@ -3507,7 +2405,7 @@ int reverse_tour_size2D(Node *trees[],double *score_vals, Point my_loc,Point max
   return kmax;
 }
 
-int tournament2D(double *score_vals, Point my_loc, Point max_loc,int tour, int compgridsize)
+int tournament2D(Population pop, Point my_loc,int tour, int compgridsize)
 {
 /* tournament selection inside a neighborhood on a 2D grid
  
@@ -3527,23 +2425,23 @@ int tournament2D(double *score_vals, Point my_loc, Point max_loc,int tour, int c
   {
 
 #ifdef EXPLICITMIG
-    k = rnd_in_area_point(my_loc, max_loc , compgridsize);
+    k = rnd_in_area_point(my_loc, pop.max_loc , compgridsize);
 #else
-    k = pick_random_neighbor_point(my_loc, max_loc , compgridsize);
+    k = pick_random_neighbor_point(my_loc, pop.max_loc , compgridsize);
 #endif
 
 //    k = is + rand()%popsize; /* choose population wide */
 
-    if (score_vals[k] < M)
+    if (pop.pop[k].score < M)
     {
-      M = score_vals[k];
+      M = pop.pop[k].score;
       kmin = k;
     }
   }
   return kmin;
 }
 
-int reversetour2D(double *score_vals, int i_tree, Point max_loc,int tour, int compgridsize)
+int reversetour2D(Population pop, int i_tree,int tour, int compgridsize)
 {
 /* tournament selection inside a neighborhood on a 2D grid
   
@@ -3564,16 +2462,16 @@ int reversetour2D(double *score_vals, int i_tree, Point max_loc,int tour, int co
   {
 
 #ifdef EXPLICITMIG
-    k = rnd_in_area(i_tree, max_loc , compgridsize);
+    k = rnd_in_area(i_tree, pop.max_loc , compgridsize);
 #else
-    k = pick_random_neighbor(i_tree, max_loc , compgridsize);
+    k = pick_random_neighbor(i_tree, pop.max_loc , compgridsize);
 #endif
 
 //    k = is + rand()%popsize; /* choose population wide */
 
-    if (score_vals[k] > M)
+    if (pop.pop[k].score > M)
     {
-      M = score_vals[k];
+      M = pop.pop[k].score;
       kmax = k;
     }
   }
@@ -3582,7 +2480,7 @@ int reversetour2D(double *score_vals, int i_tree, Point max_loc,int tour, int co
 
 
 
-int reversetour(double *score_vals,int is,int popsize,int tour)
+int reversetour(Population pop,int is,int tour)
 {
 /* inverse tournament selection
 */
@@ -3592,325 +2490,245 @@ int reversetour(double *score_vals,int is,int popsize,int tour)
 
   for (i=0;i<tour;i++)
   {
-    k = is + rand()%popsize;
+    k = is + rand()%pop.popsize;
 
-    if (score_vals[k] > M)
+    if (pop.pop[k].score > M)
     {
-      M = score_vals[k];
+      M = pop.pop[k].score;
       kmax = k;
     }
   }
   return kmax;
 }
 
-int * mapsector(int sector,int popsize)
+
+
+
+
+void random_init(Population pop,  Experiment Exp)
 {
 
-  
-  int * bound = malloc(sizeof(int)*2);
-  bound[0] = sector*popsize/4;
-  bound[1] = (sector+1)*popsize/4;
-
-  return bound;
-}
-
-
-void  init_fixedforc(double *result, int result0, double *model,int model0)
-{
-  int j,k;
-  int t0=-2500000;
-  int dt=50;
- 
-
-  fixedforc = (double*)calloc(result0,sizeof(double));
-  fixedforc2 = (double*)calloc(result0,sizeof(double));
-  emph = (double*)calloc(result0,sizeof(double));
- 
-  for (j=0;j<result0;j++)
-  {
-    for (k=0;k<model0;k++)
-    {
-      fixedforc[j] += model[k]*pow(t0 + j*dt, model0-k-1);
-    }
-
-    for (k=0;k<model0-1;k++)
-    {
-      fixedforc2[j] += (model0-1-k)*model[k]*pow(t0 + j*dt, model0-k-2);
-    }
-
-    emph[j] = result[j*SPACEDIM];
-
-/*    fixedforc[j] =result[j];
-    fixedforc2[j] = (1.70188-13)*(t0 + j*dt) - 2.932128e-07;
-*/
-  }
-}
-
-
-void random_init(int popsize, Node *trees1[], double* old_score_vals, double* ffs,double* result, double *obs, long* I, int ffs0, int ffs1, int obs0, int obs1, double aspect, double* S_init, int ts_factor, int startscore_i)
-{
-#ifdef INTRODUCE_SPECIFIC_TREE
-  int tries=0;
-#endif
   int i=0;
   double error;
 //  char tmp_str[MAXTREESTR];
 
-  Node *newtree;
+  NodeScore newns;
 
-  while (i<popsize)
+  while (i<pop.popsize)
   {        
     node_count = 0;  /* node_count is a global var */
-
-#ifdef INTRODUCE_SPECIFIC_TREE
-    if (tries<-2) /* avenue to introduce specific trees for testing */
-    {
-      sprintf(tmp_str,"((T,(p1,p2)M)V,(-5.69596e-05,-5.69596e-05)V)M");
-      newtree = str2node(tmp_str);
-    }
-    else
-    {
-#endif
-      newtree = makerandomtree(MAXDEPTH,FPR,PPR);
-#ifdef INTRODUCE_SPECIFIC_TREE
-    }
-    tries++;
-#endif
+    newns = makerandomns(MAXDEPTH,FPR,PPR, Exp);
 
     if (node_count > INITNODES)
     {
       /* score calculation for random init */
-      error = get_score(ffs, result, obs, I, newtree, ffs0, ffs1, obs0,obs1,aspect, S_init, ts_factor, startscore_i);   
+ //     fprintf(stderr,"(%g , %g) ", newns.S_i[0], newns.S_i[1]);
+
+
+      user_functions(newns);
+
+#ifdef EVOLVEIC
+      error = get_score(newns.node, newns.S_i, Exp);   
+#else 
+      error = get_score(newns.node, Exp.S_i, Exp); 
+#endif
+
       if (error <1e18) 
       {
-        trees1[i] = newtree;
-        old_score_vals[i] = error;
+        newns.score = error;
+
+        pop.pop[i] = newns;
+       
         i++;
       }
       else
       {
-        free_node(newtree);
+        free_node_score(newns);
       }
     }
     else
     {
-      free_node(newtree);
+      free_node_score(newns);
     }
   }
 }
 
-void handle_S_init(double S_init, double* obs, int obs1, double* S_init_array)
-{ /* set initial value array S_init_array for S array, based on signal S_init 
 
-     S_init_array must be initialized to values before calling this function (e.g. [0,0] )
 
-     Set S_init in config.ini to following values:
-     S_init < -10 indicates that initial value of obs must be used to initialize all state variables
-     S_init > 100 that all state variables init must have a random component around initial obs value
-     S_init > 10 that all state variables init init must be entirely random
+Population copy_pop(Population pop, Population pop_next)
+{ /* copy pop_next into pop and free previous NodeScore elements of pop.pop */
 
-*/
+  int j;
 
-  int i;
-
-  if (obs1 > SPACEDIM)
+  if (pop.popsize != pop_next.popsize)
   {
-    obs1 = SPACEDIM;  
-  }
-  else if (obs1 < SPACEDIM)
-  {
-    for (i=obs1;i<SPACEDIM;i++)
-    {
-      S_init_array[i] = 0.0;
-    }    
-  }
+    fprintf(stderr,"Error copying pop: pop sizes differ. \n");
+    exit(-1);
+  } 
 
-
-  if (S_init < -10.0)
+  for (j=0; j < pop.popsize; j++)
   { 
-    /* remember time is removed from obs in python code! hence obs[0]*/
-/*    S_init = obs[0];  */
-
-    for (i=0;i<obs1;i++)
-    {
-      S_init_array[i] = obs[i];
-    }
+ //   pop.pop[j].score = pop_next.pop[j].score;
+    free_node_score(pop.pop[j]);  // free up memory previously allocated to NodeScore members of pop.pop array
+    pop.pop[j] = pop_next.pop[j];
 
   }
-  else if (S_init > 100.0)
-  {
-    for (i=0;i<obs1;i++)
-    {
-      S_init_array[i] =  obs[i] + (S_init*1e-4)*(( (double) (rand() -0.5*RAND_MAX) )/RAND_MAX);
-
-    }
-  }
-  else if (S_init > 10.0)
-  {
-    for (i=0;i<SPACEDIM;i++)
-    {
-      S_init_array[i] = 4*(( (double) (rand() -0.5*RAND_MAX) )/RAND_MAX);
-    }
-  }
-  else
-  {
-    for (i=0;i<SPACEDIM;i++)
-    {
-      S_init_array[i] = S_init;
-    }
-  }
-
-/*
-*/ 
-
+  return pop;
 }
 
-void c_single_tree(double* ffs,double* result,double* obs, long* I, char treestr[], int ffs0, int ffs1, int result0,int obs0,int obs1, double *model, int model0, int ts_factor, int startscore_i, double S_init)
+Population reset_counters_pop(Population population)
 {
+  population.trees_reused = 0;
+  population.totsize = 0; 
+  population.toterror = 0.0; 
+  population.minerror = 1e20; 
+  population.i_min = 0; 
+
+  return population;
+}
+
+
+Population make_pop(int popsize)
+{ /* create population array and initialize with NULL NodeScore entries 
+     usage:
+
+     pop = make_pop(popsize);
+ */
+
   int i;
-  char tmp_str[MAXTREESTR];
+  //NodeScore *pop; // population array
 
-  Node *newtree;
-  double aspect;
-  double error;
-  double S_init_array[SPACEDIM];
+  Population population;
 
-  aspect = model[0];
-  srand( getpid()+time(NULL)  );
+  population.popsize = popsize;
+  population.max_loc = calc_max_p(popsize);
 
-  init_tables();
-  init_reg(ffs1);
+  population.pop = (NodeScore *)malloc(sizeof(NodeScore)*(popsize+5));  
 
-/*  sprintf(tmp_str,"(-7.75295e-07,E)V"); */
+  for (i=0;i<popsize+5;i++)
+  { 
+    population.pop[i].score = 1e19;
+    population.pop[i].node = NULL;
+  }  
 
-  strcpy(tmp_str,treestr); /* leave original in tact: string will be altered on interpretation */
-  newtree = str2node(tmp_str);
+  population.i = 0;
+  population.my_loc.x = 0;
+  population.my_loc.y = 0;
 
-  init_fixedforc(result,result0,model,model0);
+  population = reset_counters_pop(population);
 
-  handle_S_init(S_init, obs, obs1, S_init_array);
-
-  for (i=0;i<SPACEDIM;i++)
-  {
-   
-
-    printf("Init value S%d: %g\n",i,S_init_array[i]);
-  }
-
-  error = get_score(ffs, result, obs, I, newtree, ffs0, ffs1, obs0,obs1,aspect, S_init_array, ts_factor, startscore_i);
-  model[1] = error;
-/*  printf("tree score: %g with S_init: %g, numpar: %d \n", error,S_init, numpar);
-*/
+  return population;
 }
 
 
+Migr make_migr(void)
+{
+  Migr mig;
+  mig.infiles = (char *)malloc(sizeof(char)*(4*FNAMESIZE));
+  mig.outfiles = (char *)malloc(sizeof(char)*(4*FNAMESIZE));
 
-void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score_vals,double* obs, long* I, char treefile[], char treeoutfile[], int ffs0, int ffs1, int result0,int my_number,int qsubs,int obs0,int obs1,int runlen,int popsize, double *model, int model0, int ts_factor, int startscore_i, double S_init, int compgridsize, double mutationrate, int tour)
+  return mig;
+}
+
+Migr init_mig_files(Point p, Point max_p)
+{
+  Migr mig = make_migr();
+
+/* create file name strings for migrant files: in from-to format */
+ 
+  // Migrant input files. x increases rightwards, y increases downwards
+  sprintf(mig.infiles,"migr%d-%dxp",mod(p.x-1,max_p.x),mod(p.y,max_p.y) ); // from left process
+  sprintf(mig.infiles+FNAMESIZE,"migr%d-%dxm",mod(p.x+1,max_p.x),mod(p.y, max_p.y ) ); // from right process
+  sprintf(mig.infiles+2*FNAMESIZE,"migr%d-%dyp",mod(p.x,max_p.x),mod(p.y-1,max_p.y) ); // from above process
+  sprintf(mig.infiles+3*FNAMESIZE,"migr%d-%dym",mod(p.x,max_p.x),mod(p.y+1,max_p.y) ); // from below process
+
+  // Migrant output files
+  sprintf(mig.outfiles,"migr%d-%dxm",p.x,p.y ); // leftward
+  sprintf((mig.outfiles+FNAMESIZE),"migr%d-%dxp",p.x,p.y ); // rightward
+
+  sprintf((mig.outfiles+2*FNAMESIZE),"migr%d-%dym",p.x,p.y ); // upward
+  sprintf((mig.outfiles+3*FNAMESIZE),"migr%d-%dyp",p.x,p.y ); // downward
+
+  return mig;
+
+}
+
+void c_nextgen(int my_number,int qsubs,int runlen,int popsize, int compgridsize, double mutationrate, int tour)
 {
 
-/*  fprintf(stderr,"Aspect: %f\n",model[0]);
-*/
+  Population pop; // struct containing population array
+  Population pop_next; // next population
 
-  Node *trees1[MAXTREES+5]; /* the old trees */
-  Node *trees2[MAXTREES+5]; /* the new trees */
-
-/*
-  Node *(*previousgen)[MAXTREES+5] = &trees1;
-  Node *(*currentgen)[MAXTREES+5] = &trees2;
-  Node *(*tmp_pointer)[]; 
-*/
+  char restartfile[20];
 
   int *current = make_int(0);
 
   int *nconsts;
   int size=0;
 
-  int i,j,run, totsize,qrows,qcols,my_number_x,my_number_y, i_min, leafcount, trees_reused;
+  int i,j,run, leafcount, new_flag;
   int error_flag=0;
 
-  double S_init_array[SPACEDIM];
-  double aspect;
-  double avghill, avgsize, avgtreesreused;
+  double error, avgsize, avgerror, avgtreesreused;
   
-  double error, minerror, toterror,varerror;
+  double varerror;
   double *consts[MAXCONSTS];
 
   char tmp_str[MAXTREESTR]; /* used only once */
   char line_str[MAXTREESTR];
 
-  char * infiles[4];
-  char * outfiles[4];
-
-  char outfile1[FNAMESIZE];
-  char outfile2[FNAMESIZE];
-  char outfile3[FNAMESIZE];
-  char outfile4[FNAMESIZE];
-
-  char infile1[FNAMESIZE];
-  char infile2[FNAMESIZE];
-  char infile3[FNAMESIZE];
-  char infile4[FNAMESIZE];
-
   char repfile[FNAMESIZE];
   char elitefile[FNAMESIZE];
 
-  Node *newtree;
-  Node *tmptree1;
-  Node *tmptree2;
-  Node *tmptree3;
-
-  int i_tree1, i_tree2, i_tree_old;
-  double existing_score = -1; 
-
   int migrants = MIGRATE*popsize/4;  // number of migrants to output in each of the 4 migrant files.
 
-  Point max_loc;
+  NodeScore newns;
+  NodeScore tmpns1;
+  NodeScore tmpns2;
+  NodeScore tmpns3;
 
-/*
-  gettimeofday(&time,NULL);
-  srand((unsigned) getpid()+(time.tv_sec*100) + (time.tv_usec/100)  );
-*/
+  int i_tree1, i_tree2, i_tree_old;
 
-//  fprintf(stderr,"tour: %d ", tour);
-  
-  once_flag = 0;
+  Point my_loc; // to be used in internal grid
+  Point my_loc_external;
+  Point max_loc_external; // based on total qsubs
 
-  aspect = model[0];
+  double existing_score;
+
+  // report file and elite tree output files
+  sprintf(repfile,"report%d",my_number);
+  sprintf(elitefile,"elite%d",my_number);
+  sprintf(restartfile,"pop%d",my_number);
+
+  Experiment Exp = make_experiment(-1); // also initializes Exp.S_i
+
+  pop = make_pop(popsize);
+  pop_next = make_pop(popsize);
+
+  if (pop.max_loc.x < 2*compgridsize)
+  {
+    fprintf(stderr,"Error: compgridsize %d must be at least twice max_loc.x %d. \n", compgridsize, pop.max_loc.x);
+    exit(-1);
+
+  }
 
   srand( getpid()+time(NULL)  );
 
 /*  printf("random seed: %d \n",getpid()+(time.tv_sec*100) + (time.tv_usec/100));
 */
-  init_tables();
-  init_reg(ffs1);
 
-  max_loc = calc_max_p(popsize);
+  model_init(Exp);
 
-  printf("runlen: %d, my_number: %d, qsubs: %d, S_init: %g, numpar: %d \n",runlen,my_number, qsubs, S_init, numpar);
-
-  init_fixedforc(result,result0,model,model0);
-
-  handle_S_init(S_init, obs, obs1, S_init_array);
-
-  qrows = (int) sqrt(qsubs);
-  qcols = (int) qsubs/qrows;
-
-  my_number_y = ((int) mod(my_number/qcols,qrows));
-  my_number_x = ((int) mod(my_number, qcols) );
-
-#ifdef HI_MUT_SPOT
-  // Create a small "hot spot" of 2x2 cores, with locally increased mutation rate
-  if (  (qsubs > 16) &&   (my_number_y <= 1) && ( my_number_x <= 1)    ) 
-  {
-    mutationrate = 0.4;
-  }
+#ifdef DEBUG
+  test_tree_io();
 #endif
 
+  //printf("runlen: %d, my_number: %d, qsubs: %d, S_init: %g, numpar: %d \n",runlen,my_number, qsubs, *Exp.S_i.data, numpar);
 
-  for (j=0; j < popsize; j++)
-  {
-    trees1[j]=NULL;
-  }
+  max_loc_external = calc_max_p(qsubs);  // max x is qrows and max y is qcols
+  my_loc_external = i2point(my_number, max_loc_external.x); // my_number_x is p.x, my_number_y is p.y
+
+  Migr mig = init_mig_files(my_loc_external, max_loc_external);
 
   nconsts = make_int(0);
 
@@ -3919,7 +2737,8 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
     fprintf(stderr,"Error: popsize %d exceeds MAXTREES %d.\n",popsize,MAXTREES);
   }
 
-  int ntrees = read_data(treefile, trees1,MAXTREES);
+  int ntrees = read_pop(restartfile, pop);
+
   if (ntrees <= -1)
   {
     if (ntrees == -1)
@@ -3927,51 +2746,19 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
       fprintf(stderr,"Bad pop file detected, populating from random init.\n");
     }
 
-    printf("No data file or bad file. Random init \n");
+    printf("No data file. Random init \n");
 /*    mutationrate = 4.0*mutationrate;   */
     
-    random_init(popsize, trees1, old_score_vals, ffs, result, obs, I, ffs0, ffs1, obs0, obs1, aspect, S_init_array, ts_factor, startscore_i);
+    random_init(pop,  Exp);
     ntrees = popsize;
   }
-
-/* create file name strings for migrant files: in from-to format */
-
-  // Migrant input files. x increases rightwards, y increases downwards
-  sprintf(infile1,"migr%d-%dxp",mod(my_number_x-1,qcols),mod(my_number_y,qrows) ); // from left process
-  sprintf(infile2,"migr%d-%dxm",mod(my_number_x+1,qcols),mod(my_number_y,qrows) ); // from right process
-
-  sprintf(infile3,"migr%d-%dyp",mod(my_number_x,qcols),mod(my_number_y-1,qrows) ); // from above process
-  sprintf(infile4,"migr%d-%dym",mod(my_number_x,qcols),mod(my_number_y+1,qrows) ); // from below process
-
-  // Migrant output files
-  sprintf(outfile1,"migr%d-%dxm",my_number_x,my_number_y ); // leftward
-  sprintf(outfile2,"migr%d-%dxp",my_number_x,my_number_y ); // rightward
-
-  sprintf(outfile3,"migr%d-%dym",my_number_x,my_number_y ); // upward
-  sprintf(outfile4,"migr%d-%dyp",my_number_x,my_number_y ); // downward
-
-  // report file and elite tree output files
-  sprintf(repfile,"report%d",my_number);
-  sprintf(elitefile,"elite%d",my_number);
-
-  infiles[0] = infile1;
-  infiles[1] = infile2;
-  infiles[2] = infile3;
-  infiles[3] = infile4;
-
-  outfiles[0] = outfile1;
-  outfiles[1] = outfile2;
-  outfiles[2] = outfile3;
-  outfiles[3] = outfile4;
-
-  Point my_loc; // to be used in internal grid
 
   for (run=0;run<runlen;run++)
   {
 
     for (j=0;j<4;j++) /* Import trees from external processes. Read migrant files. */
     { 
-      error_flag = readmigrants(infiles ,j ,trees1,old_score_vals, max_loc, migrants, compgridsize, tour); /* j arg is sector */
+      error_flag = readmigrants(mig ,j ,pop, migrants, compgridsize, tour); /* j arg is sector */
       if (error_flag == -1)
       {
         break;
@@ -3981,134 +2768,162 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
     { 
       /* One bad file will cause pop to be dropped. Using function readmigrants_buffered instead (above) allows keeping the pop. */
       fprintf(stderr, "Error in migrant io detected, replacing entire population.\n");
-      random_init(popsize, trees1, old_score_vals, ffs, result, obs, I, ffs0, ffs1, obs0, obs1, aspect, S_init_array, ts_factor, startscore_i);
+      random_init(pop,  Exp);
     }
 
-    totsize=0;
-    minerror=1e20;
-    i_min=0;
-    toterror=0;
-    trees_reused=0;
-
-    i=0;
-    while (i<popsize) /* fill trees2 and score_vals. i is only incremented once newtree is succesfully added to trees2, not discarded.  */
+#ifdef DEBUG
+    for (i=0;i<popsize;i++)
     {
-      node_count = 0; /* count how many nodes are produced for newtree for cost function*/
-
-      existing_score = -1.0; 
-      if ( rand() > PNEW*RAND_MAX)   
+      if (check_node(pop.pop[i].node) == 1)
       {
-        my_loc = i2point(i, max_loc.x);
-
-        i_tree1 = tournament2D(old_score_vals, my_loc, max_loc,tour, compgridsize);
-        i_tree2 = tournament2D(old_score_vals, my_loc, max_loc,tour, compgridsize);
-
-        tmptree1 = trees1[i_tree1];
-        tmptree2 = trees1[i_tree2];
-
-        tmptree3 = unifcross(tmptree1,tmptree2, PROBSWAP,1);
-
-#ifdef LOCALMUTHOTSPOT
-        if ((my_loc.x == 0) && (my_loc.y == 0))
-        {
-          newtree = allmut(tmptree3, 0.3); 
-        }
-        else
-        {
-          newtree = allmut(tmptree3, mutationrate); 
-        }
-#else
-        newtree = allmut(tmptree3, mutationrate); 
+        fprintf(stderr,"bad pop at i=%d\n",i);
+        exit(-1);
+      }
+    }
 #endif
 
 
- //       fprintf(stderr,"%d",compare_trees(tmptree1,newtree));
+// --------- MAIN LOOP CREATING THE NEXT GENERATION ---------------
+    i=0;
+    while (i<popsize) /* fill pop_next. i is only incremented once new_ns.node is succesfully added, not discarded.  */
+    {
+      node_count = 0; /* count how many nodes are produced for new_ns.node for cost function*/
 
-        if (compare_trees(tmptree1,newtree) == 0)
-        {
-          existing_score = old_score_vals[i_tree1];
-          trees_reused++;
-        }
-        else
-        {
-          i_tree_old = does_tree_exist(newtree,trees1, my_loc, max_loc, compgridsize);
-          if (i_tree_old > -1)
-          {
-            existing_score = old_score_vals[i_tree_old];
-            trees_reused++;            
-          } 
-        }
+      // TREE MUTATIONS AND CROSSING using evolve
 
-        free_node(tmptree3);
+      new_flag = 1;
+      existing_score = -1.0; 
+      if ( rand() > PNEW*RAND_MAX)   
+      {
+        my_loc = i2point(i, pop.max_loc.x);
+
+        i_tree1 = min(tournament2D(pop, my_loc, tour, compgridsize),pop.popsize-1);
+        i_tree2 = min(tournament2D(pop, my_loc, tour, compgridsize),pop.popsize-1);
+
+        tmpns1 = pop.pop[i_tree1];
+        tmpns2 = pop.pop[i_tree2];
+
+        tmpns3 = crossover_ns(tmpns1,tmpns2, PROBSWAP,1);  // crossover. this creates a new tree
+
+        newns = allmut(tmpns3, mutationrate, Exp);  // mutate. this also creates a new tree
+
+//    newns = copy_node_score(tmpns1);  // TESTING
+
+#ifdef DEBUG
+        if (check_node(newns.node) == 1)
+        {
+          fprintf(stderr,"newns not sound after unifcross and allmut, aborting. \n");
+          exit(-1);
+        }
+#endif
+        user_functions(newns);
+
+#ifdef INLINESCORING
+        i_tree_old = does_tree_exist(newns,pop, my_loc, compgridsize);
+        if (i_tree_old > -1)
+        {
+          new_flag = 0;
+          existing_score = pop.pop[i_tree_old].score;
+          pop_next.trees_reused++;            
+        } 
+#endif
+
+        free_node_score(tmpns3);
       }
       else
       {
-        newtree = makerandomtree(MAXDEPTH,FPR,PPR);
+        newns = makerandomns(MAXDEPTH,FPR,PPR, Exp);
       }
 
-
-      size = tree_consts(newtree, consts,nconsts,CONSTSCUTOFF); /* fill consts array */
+      size = tree_consts(newns.node, consts,nconsts,CONSTSCUTOFF); /* fill consts array */
       *nconsts=0;
-/*      fprintf(stderr,"size=%d\n",size);  */
+ 
+ //     fprintf(stderr,"size=%d    \n",size);  
 
       if ( (size > -1) && (size < MAXSIZE) )
       {  
     /* perform optimization here */    
 
-   /*     mutconsts(consts,size); */
+  //      mutconsts(consts,size, mutationrate/4.0); 
 
-        if (existing_score > MIN_SCORE)
+#ifdef INLINESCORING
+
+        if (new_flag == 0)
         {
           error = existing_score;
         }
         else
         {
-          error = get_score(ffs, result, obs, I, newtree, ffs0, ffs1, obs0,obs1,aspect, S_init_array, ts_factor, startscore_i);
+
+ #ifdef EVOLVEIC
+          error = get_score(newns.node, newns.S_i, Exp);
+ #else
+          error = get_score(newns.node, Exp.S_i, Exp);
+ #endif
         }
  
         if (error <1e18) 
         {
 
-
-            /* note that hillclimb checks size>0 */
-/*          error = hillclimb(ffs, result, obs, I, newtree, ffs0, ffs1, obs0, obs1, consts , 
-                             size, error,aspect, S_init, ts_factor, startscore_i);
-*/ 
-
 /*        parsimony not included in error reporting to report and elite output files */
 
-          leafcount = conparcount(newtree, current);
+          leafcount = conparcount(newns.node, current);
           *current = 0;
 
-
-     /*     fprintf(stderr,"%f  %f %d \n",error,((double) PARSIMONY*((double) leafcount)) , leafcount );  */
-
           // fill score vals in new generation (the old generation has old_score_vals).
-          score_vals[i] = error + ((double) PARSIMONY*((double) leafcount)); 
 
+          if (new_flag == 0)  // this indicates we are using cached score: no parsimony added.
+          {
+            //score_vals[i] 
+            newns.score = error;          
+          }
+          else
+          {
+            //score_vals[i] = error + ((double) PARSIMONY*((double) leafcount)); 
+            newns.score = error + ((double) PARSIMONY*((double) leafcount)); 
+          }
 
           // fill tree array for new generation
-          trees2[i] = newtree; /* found an acceptable tree */
-          totsize +=size;
-          toterror += error;
-          if (error < minerror)
+          //trees2[i] = newns; /* found an acceptable tree */
+          pop_next.pop[i] = newns;
+
+          pop_next.totsize +=size;
+          pop_next.toterror += error;
+          if (error < pop_next.minerror)
           {
-            minerror = error;
-            i_min = i;
+            pop_next.minerror = error;
+            pop_next.i_min = i; // keep track of best score
           }
-          i++;
+          i++; // increment loop counter
         }
         else
         {
-          free_node(newtree);
+          free_node_score(newns);  // tree not useable with error 1e19, discard
         }
+#else
+
+        pop_next.pop[i] = newns;
+
+        pop_next.totsize +=size;
+
+        i++; // increment loop counter
+
+#endif  
+
       }
       else
       {
-        free_node(newtree);
+        free_node_score(newns); // tree not useable due to size limits, discard and try again
       }
     }; /* end while loop on popsize */
 
+
+#ifndef INLINESCORING
+// score all the new trees
+
+    pop_next = score_pop(pop, pop_next, Exp, compgridsize);
+
+#endif
 
   /* the next generation, trees2, is now ready
     copy score_vals to old_score_vals and copy trees2 to trees1 (to be improved later). 
@@ -4116,56 +2931,111 @@ void c_nextgen(double* ffs,double* result, double* old_score_vals, double* score
 
 #ifdef EXPLICITMIG
     // exchange trees among neighboring cells internal to this CPU process.
-    internal_migration(trees2, score_vals, max_loc, tour, compgridsize, ((int) MIGRATE_INTERNAL*(compgridsize*compgridsize))/4  );
+    internal_migration(pop_next, tour, compgridsize, ((int) MIGRATE_INTERNAL*(compgridsize*compgridsize))/4  );
 #endif
 
     varerror=0;
-    toterror = ((double) toterror/popsize);
-    for (j=0; j < popsize; j++)
+    avgerror = ((double) pop_next.toterror/pop_next.popsize);
+    for (j=0; j < pop_next.popsize; j++)
     {
-      varerror += (score_vals[j] - toterror)*(score_vals[j] - toterror);
+      varerror += (pop_next.pop[j].score - avgerror)*(pop_next.pop[j].score - avgerror);
     }
 
-    avghill = ((double) nhillsearches)/popsize;    
-    nhillsearches = 0;
+    varerror = varerror/pop_next.popsize;
 
-    avgsize = ((double) totsize)/popsize;
+ //   avghill = ((double) nhillsearches)/popsize;    
+
+//    nhillsearches = 0;
+
+    avgsize = ((double) pop_next.totsize)/pop_next.popsize;
     
-    avgtreesreused = ((double) trees_reused)/popsize;  
+    avgtreesreused = ((double) pop_next.trees_reused)/pop_next.popsize;  
 
     for (j=0;j<4;j++) /* output migrants to adjacent processes to files. j represents xm,xp,ym,yp */
     {
-      migrants2buffer(trees2, score_vals, j, max_loc, ffs, result, obs, I, ffs0, ffs1, obs0,obs1,aspect, S_init_array, ts_factor, startscore_i, migrants, compgridsize);
-      store_data(outfiles[j],treebuffer,"w"); /* write migrant tree files: xm,xp,ym,yp */
+      migrants2buffer(pop_next, j, migrants, compgridsize, Exp, my_loc_external);
+      
+      sprintf(tmp_str,"%s_tmp",mig.outfiles+j*FNAMESIZE);
+      store_data(tmp_str,treebuffer,"w"); /* write migrant tree files: xm,xp,ym,yp */
+      rename(tmp_str,mig.outfiles+j*FNAMESIZE); // used tmp file as other process also read from these files
     }
-  
+
     /* report stats */
-    sprintf(line_str,"%g %g %g %g %g %g\n",minerror,toterror,varerror,avgsize,avghill, avgtreesreused);
+    sprintf(line_str,"%g %g %g %g %g\n",pop_next.minerror, avgerror,sqrt(varerror),avgsize, avgtreesreused);
     store_data(repfile,line_str,"a"); /* append stats to report file (filename repfile) */
 
-    (*code2str_table[(int) trees2[i_min]->op])(trees2[i_min],tmp_str);
+    (*code2str_table[(int) pop_next.pop[pop_next.i_min].node->op])(pop_next.pop[pop_next.i_min].node,tmp_str);
 
-    sprintf(line_str,"%g %s\n",minerror, tmp_str);
+//    sprintf(line_str,"%g %s\n",minerror, tmp_str);
+
+    line_str[0] = '\0';
+    NodeScore2bufferline(pop_next.pop[pop_next.i_min],line_str);
+
+
     store_data(elitefile,line_str,"a"); /* append stats to report file */
 
-    for (j=0; j < popsize; j++)
+    if (pop_next.pop[pop_next.i_min].score == 0.0)
     {
-      old_score_vals[j] = score_vals[j];
-      free_node(trees1[j]);
-      trees1[j] = trees2[j];
+      printf("Found exactly matching solution: %sFinished.\n", line_str);
+      exit(0);
     }
 
+    pop = copy_pop(pop, pop_next);
+    pop_next = reset_counters_pop(pop_next); // filling pop_next again
 
   }  /* end of runlen for loop */
 
-  trees2buffer(trees2,popsize);
+  pop2buffer(pop_next);
 
-  for (j=0; j < popsize; j++)
-  {
-    free_node(trees1[j]);
-  }
-  free(fixedforc);
+
+  free_pop(pop);
+  free(pop_next.pop);  // pop_next nodes have just been copied to pop so not using free_pop
+
+  free_experiment(Exp);
+
+  free(mig.infiles);
+  free(mig.outfiles);  
+
   free(nconsts);
-  store_data(treeoutfile,treebuffer,"w");
+  free(current);
+
+  store_data(restartfile,treebuffer,"w"); // buffer contains tree population, is written to file.
 }
+
+
+
+int main ( int argc, char *argv[] )
+{
+
+    int my_number;
+    int qsubs;
+    int runlen;
+    int popsize; 
+    int compgridsize; 
+    double mutationrate; 
+    int tour; 
+ 
+    if ( argc != 9 ) /* argc should be 7 for correct execution */
+    {
+        printf( "usage: %s my_number qsubs runlen popsize compgridsize mutationrate tour\n", argv[0] );
+    }
+    else 
+    {
+        my_number = atoi(argv[1]);
+        qsubs = atoi(argv[2]);
+        runlen = atoi(argv[3]);
+        popsize = atoi(argv[4]);
+        compgridsize = atoi(argv[5]);
+        mutationrate = strtod(argv[6],NULL);
+        tour = atoi(argv[7]);
+    
+        printf("Starting my_number %d, qsubs %d, runlen %d, popsize %d, compgridsize %d, mutationrate %g, tour %d\n",my_number, qsubs , runlen, popsize, compgridsize, mutationrate, tour);
+
+        c_nextgen(my_number, qsubs, runlen, popsize, compgridsize, mutationrate, tour);
+
+    }
+
+    return 0;
+}
+
 

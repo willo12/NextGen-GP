@@ -15,10 +15,9 @@ setup(
     cmdclass = {'build_ext': build_ext},
     ext_modules = [Extension("nextgen",
         #                     libraries=["c_nextgen"],   # compile from library libc_nextgen.so. Remove "c_nextgen.c" entry below
-        #                     libraries=["profiler"], # for profiling
-                             sources=["nextgen.pyx", "c_nextgen.c"],
+                             sources=["nextgen.pyx", "model.c", "c_nextgen.c", "fields.c", "states.c", "basic_ops.c", "my_ops.c", "tree_io.c"],
                              extra_compile_args=["-O3"],
-                             include_dirs=[numpy.get_include(),"includes"])],
+                             include_dirs=[numpy.get_include(),"include"])],
 )
 
 

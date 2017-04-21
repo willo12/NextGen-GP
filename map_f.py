@@ -4,7 +4,7 @@ import numpy as np
 from nextgen import map_f
 import matplotlib.pyplot as plt
 
-from tree2latex import newick2Latex
+from treetools import newick2Latex
 import os, sys
 
 # Plot the tree as a function of its inputs

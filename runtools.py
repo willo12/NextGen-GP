@@ -2,7 +2,7 @@ import os.path
 from math import sqrt
 import numpy as np
 import os
-import h5py as hdf
+
 import sys
 import time
 
@@ -14,7 +14,7 @@ from my_data import glacial
 
 import nextgen
 
-
+import subprocess
 
 def load_config():
   # get directory component of pathname using dirname (would get the file with basename)
@@ -182,9 +182,6 @@ def prep_landscape():
 #else:
 #  result=np.ones((0-t0)/dt+1 , dtype=np.float64)
 
-#model = np.polyfit(otime,d18o, 2).astype(np.float64)
-
-#result = np.polyval(model, np.arange(t0,dt,dt) ).astype(np.float64)
 
 
 def smoothGaussian(array,strippedXs=False,degree=5):  
@@ -218,7 +215,27 @@ def smoothGaussian(array,strippedXs=False,degree=5):
 
   return np.array(smoothed)  
 
-def prep_run(config, SPACEDIM=2):
+# ----- ARRAY IO FUNCTIONS CORRESPONDING TO C CODE -----------
+
+def write_array(filename,array, fmt='%0.8e'):
+  """ Write array to text file in format recognized by NextGen and using np.savetxt
+      Reading from file can be done using np.loadtxt, as header is a comment
+  
+  """
+
+  shape = list(array.shape)
+  if len(shape) == 1:
+    shape.append(1);
+
+  np.savetxt(filename,array, fmt=fmt, header='%d %d'%(shape[1], shape[0]))
+
+  return
+
+
+
+# -------------
+
+def get_config(config):
   """
   Prepare to run tree from c
 
@@ -229,8 +246,25 @@ def prep_run(config, SPACEDIM=2):
   compgridsize = config['driver']['compgridsize']
   mutationrate = config['driver']['mutationrate'] 
   tour = config['driver']['tour'] 
+  ts_factor = config['glacial']['ts_factor'] # this will be moved to c code to read from config.ini directly
 
-  Iffs, obs,I, ts_factor, startscore_i = glacial(**(config['glacial'].dict()))
+  popsize = config['driver']['popsize']
+  qsubs = config['driver']['qsubs']
+  runlen = config['driver']['runlen']
+
+  return compgridsize, mutationrate, tour, S_init, popsize, qsubs, runlen
+
+
+def prep_run(config):
+  """
+  Prepare to run tree from c
+
+  
+  """
+
+  spacedim = config['state']['spacedim']
+
+  Iffs, obs,I, startscore_i = glacial(**(config['glacial'].dict()))
 
   # raise Exception('TEST: %s'%str(startscore_i))
 
@@ -239,17 +273,53 @@ def prep_run(config, SPACEDIM=2):
   obs = obs[:,1:].copy(order='C'); # removing time
   I = I.copy(order='C')
 
-  aspect = -1
+  result=np.ones((Iffs.shape[0] , spacedim ), dtype=np.float64)
 
-  result=np.ones((Iffs.shape[0] , SPACEDIM ), dtype=np.float64)
+  # write_array('yo.txt',Iffs);
 
-  model = np.zeros(3).astype(np.float64)
-  model[0]=aspect
+  return Iffs, obs,I, startscore_i, result, otime
 
-  return Iffs, obs,I, ts_factor, startscore_i, S_init, obs, I, aspect, result, model, otime, compgridsize, mutationrate, tour
+def prep_data(config=None):
 
-def batch_run(old_score_vals,score_vals, treefile,treeoutfile,my_number,qsubs,runlen,popsize,config=None,SPACEDIM=2):
-  """ Run the main GP loop.
+  if config is None:
+    config = load_config()
+
+  S_init = config['driver']['S_init']
+  ts_factor = config['glacial']['ts_factor']
+  add_random_col = config['driver']['add_random_col']
+
+  if add_random_col == 0:
+    add_random_col = False
+  else:
+    add_random_col = True
+
+  spacedim = config['state']['spacedim']
+
+  if add_random_col:
+    Iffs_small, obs,I, startscore_i, result, otime = prep_run(config)
+
+    s = Iffs_small.shape
+
+    mean=0
+    std=1
+    samples = np.random.normal(mean,std,size=s[0])
+  
+    Iffs = np.zeros((s[0],s[1]+1))
+    Iffs[:,:-1] = Iffs_small
+    Iffs[:,-1] = samples
+  else:
+    Iffs, obs,I, startscore_i, result, otime = prep_run(config)
+
+
+  write_array("Iffs",Iffs)
+  write_array("obs",obs)
+  write_array("I",I)
+
+
+  write_array("params",np.array([startscore_i, S_init, ts_factor]),fmt='%0.3g')
+
+def batch_run(my_number,config=None, subprocflag = False):
+  """ Run the main GP loop on one node.
 
       Prepares data, reads config and calls netgen in c module. 
 
@@ -257,18 +327,34 @@ def batch_run(old_score_vals,score_vals, treefile,treeoutfile,my_number,qsubs,ru
   if config is None:
     config = load_config()
 
-  Iffs, obs,I, ts_factor, startscore_i, S_init, obs, I, aspect, result, model, otime, compgridsize, mutationrate, tour = prep_run(config,SPACEDIM)
+  # Replace below with:
+  # Save arrays from prep_run using write_array elsewhere: when calling disp
+  # only start nextgen executable here, using config parameters
+
+  compgridsize, mutationrate, tour, S_init, popsize, qsubs, runlen = get_config(config)
+#  Iffs, obs,I, startscore_i, result, otime = prep_run(config)
+
+
+
+  args = [my_number,qsubs,runlen,popsize, compgridsize, mutationrate, tour, S_init]
 
   # Start c code. This will read treefile and save tree file with filename treeoutfile
-  nextgen.nextgen(Iffs,result,old_score_vals,score_vals,obs,I, treefile,treeoutfile,my_number,qsubs,runlen,popsize,model,ts_factor,startscore_i, S_init, compgridsize, mutationrate, tour)
+  # nextgen.nextgen(*args)
 
-def stability_test(tree,config=None,SPACEDIM=2,ts_factor=[2,8]):
+  if subprocflag:
+    str_args = tuple(["nextgen"]+[str(a) for a in args])
+    subprocess.check_call(str_args, stdout = subprocess.PIPE)
+  else:
+    nextgen.nextgen(my_number,qsubs,runlen,popsize, compgridsize, mutationrate, tour, S_init)
+
+
+
+def stability_test(tree,config=None,ts_factor=[2,8], S_init_array = None):
   """
   Test whether tree integration is stable with respect to time step
 
   config: run configuration to use
   ts_factor: list of time ts_factors (in c code) to test. time step is forcing time step divided by ts_factor: higher ts_factor is finer integration time step.
-
 
   """
 
@@ -285,7 +371,7 @@ def stability_test(tree,config=None,SPACEDIM=2,ts_factor=[2,8]):
     for i in range(len(ts_factor)):
       tree_list.append(treestr)    
 
-  Iffs,result,obs,I, tree_list,model,ts_factor,startscore_i, S_init, otime, scores = single_run(tree_list,ts_factor=[2,8])
+  Iffs,result,obs,I, tree_list,ts_factor,startscore_i, S_init, otime, scores = single_run(tree_list,ts_factor=[2,8], S_init_array = S_init_array)
 
   n_perturbations = len(ts_factor_orig) - 1
   stab_scores = []
@@ -296,7 +382,10 @@ def stability_test(tree,config=None,SPACEDIM=2,ts_factor=[2,8]):
 
   return stab_scores
 
-def single_run(tree,config=None,SPACEDIM=2,ts_factor=None):
+def single_run(tree,config=None,ts_factor=None, S_init_array=None):
+
+  result_file = 'result'
+  score_file = 'score_val'
 
   if isinstance(tree,str):
     tree = [tree,]
@@ -304,7 +393,18 @@ def single_run(tree,config=None,SPACEDIM=2,ts_factor=None):
   if config is None:
     config = load_config()
 
-  Iffs, obs,I, ts_factor_config, startscore_i, S_init, obs, I, aspect, result, model, otime = prep_run(config,SPACEDIM)
+  spacedim = config['state']['spacedim']
+
+  ts_factor_config = config['glacial']['ts_factor']
+  S_init = config['driver']['S_init']
+
+  if S_init_array is None:
+    S_init_array = np.zeros(spacedim)
+    S_init_array[0] = S_init 
+
+  prep_data(config) # create local data files
+
+  Iffs, obs,I, startscore_i, result, otime = prep_run(config)
 
   if ts_factor is None:
     ts_factor = ts_factor_config
@@ -323,14 +423,16 @@ def single_run(tree,config=None,SPACEDIM=2,ts_factor=None):
   results = []
 
   for i, treestr in enumerate(tree):    
-    nextgen.single_tree(Iffs,result,obs,I, treestr,model,ts_factor[i],startscore_i, S_init)
-    results.append(deepcopy(result))
-    scores.append(model[1])
+    nextgen.single_tree(treestr, S_init_array,ts_factor[i])
+
+    results.append(np.loadtxt(result_file))
+    scores.append(float(np.loadtxt(score_file)))
+
 
   if (len(tree) == 1):
     results = results[0]
 
-  return Iffs,results,obs,I, tree,model,ts_factor,startscore_i, S_init, otime, scores
+  return Iffs,results,obs,I, tree,ts_factor,startscore_i, S_init, otime, scores
   
 
 

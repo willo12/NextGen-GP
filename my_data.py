@@ -8,6 +8,9 @@ import warnings
 def norm(series):
 #  return series
 
+    if (len(series) == 0):
+      raise Exception("Error: time series must be non-empty")
+
     new_series = series - np.mean(series)   
 
     return 2*(new_series)/max(abs(new_series))
@@ -262,15 +265,18 @@ def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/pape
 
 #  raise Exception(slices_ffs)
 
-  ffs = ffs[ slices_ffs ]
- 
 
+  ffs = ffs[ slices_ffs ]
 
   dt_forc_raw = abs(ffs[1,0] - ffs[0,0])
   int_step = int(round(dt_forc_raw/forcing_substeps))
 
+  t_end = int(round(ffs[-1,0]))
+
   # finer times to interpolate to
-  itime = np.arange(int(round(ffs[0,0])),int_step,int(round(ffs[-1,0]))+int_step)
+  itime = np.arange(int(round(ffs[0,0])),t_end+int_step ,int_step )
+
+#  print itime
 
   sh = ffs.shape
 
@@ -288,13 +294,14 @@ def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/pape
 
   dt_forc = abs(Iffs[1,0] - Iffs[0,0])
 
-  I = get_grid(np.squeeze(obs[:,0]), dt=dt_forc, t0 = t_start) # I subset of Iffs times, must have same length as obs[:,0]
+  I = get_grid(np.squeeze(obs[:,0]), dt=dt_forc, t0 = t_start, t_end = t_end) # I subset of Iffs times, must have same length as obs[:,0]
 
   
 
-  if I.shape[0] != obs.shape[0]: # c code will compare result[I[i]] values to obs[i], so must match
-    raise Exception("Data Setting Error: all obs time steps must be divisible by dt_forc. Also, t_start (%d vs obs %d) must be within data file range. Shape I: %s, shape obs: %s."%(t_start, obs[0,0], I.shape[0] , obs.shape[0]))
+  if I.shape[0] > obs.shape[0]: # c code will compare result[I[i]] values to obs[i], so must match
+    raise Exception("Data Setting Error: I must be shorter than obs. All obs time steps must be divisible by dt_forc. Also, t_start (%d vs obs %d) must be within data file range. Shape I: %s, shape obs: %s."%(t_start, obs[0,0], I.shape[0] , obs.shape[0]))
 
+  obs = obs[:I.shape[0],:]
 
   return (Iffs, obs,I)
 
@@ -358,18 +365,26 @@ def glacial(smooth=0,t_obs=0,t_forc=0, t_start = -int(2.5e6), dt=50, startscore_
     obs = obs_tmp
 
   if startscore_t is not None:
+
+
+
     startscore_i=np.where(obs[:,0]==startscore_t)[0]  
     if len(startscore_i)>0:     # detect a common time point
       startscore_i = startscore_i[0]
     else:
-      # should we raise an exception here?
-      warnings.warn("Not found: startscore_i, setting 0. Check obs file. Answer will likely be wrong, and using wrong length files can cause seg faults.")
+
+      if (startscore_t < obs[0,0]):
+        warnings.warn("Warning: startscore_t (value %d) < earliest obs obs[0,0] (value %d). Setting startscore_i=0"%(startscore_t, obs[0,0]))
+      else:
+        # should we raise an exception here?
+        warnings.warn("Not found: startscore_i, even though startscore_t (value %d) > earliest obs obs[0,0] (value %d). Check obs file ok. Setting startscore_i=0. Answer will likely be wrong, and using wrong length files can cause seg faults.")
+
       startscore_i = 0
 
   else:
     startscore_i=0
 
-  return Iffs, obs,I, ts_factor, startscore_i
+  return Iffs, obs,I, startscore_i
 
 def epica(forcing_files = [('j_65north_trunc.txt', (1,))  ], obs_file ='PROJECTS/paper_glac/epica_T.txt',detrend=False,cols=[5,], dt_forc=50, home = os.environ['HOME'], ts_factor=1, startscore_t=None,smooth=0):
 	

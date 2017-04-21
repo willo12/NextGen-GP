@@ -44,21 +44,6 @@ def nw_split(text):
 
     return result
 
-def parse_newick(text):
-
-  if '(' in text:
-    opcode = text[-1]
-    childrentext = text[1:-2]
-
-    childtexts = nw_split(childrentext)
-    
-    return node(code2wrapper[opcode],[parse_newick(ct) for ct in childtexts])
-  else:
-    if 'p' in text:
-      return paramnode(int(text[1:]))
-    else:
-      return constnode(float(text))
-
 
 def newick2Latex(text, index_start=0):
 
