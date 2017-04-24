@@ -38,7 +38,7 @@ int arg_table[OPTABLE];
 char treebuffer[TREEBUFFER];
 
 int node_count;
-
+void remove_op(Node *tree, char op, int first_encounter);
 int force_params_node(Node *tree, int i_param);
 
 
@@ -222,6 +222,50 @@ int tree_consts(Node *t, double *consts[], int *current, int maxconsts)
   return -1;
 };
 
+void remove_op(Node *tree, char op, int first_encounter)
+{
+/* remove op by linking parent to grandchild.
+   returns number of replacements made.
+
+   so far only works on 1-child ops
+
+  */
+
+  int i;
+  Node *child;
+  Node *grandchild;
+
+  for (i=0;i<arg_table[tree->op];i++) // no looping for childless nodes
+  {
+    child = tree->children[i];
+
+    if (child->op == op)
+    {
+      if (first_encounter == 1)
+      {
+        remove_op(child, op, 0);
+      }
+      else
+      {
+        do
+        { // there might be multiple nested nodes with op
+          grandchild = child->children[0];
+          tree->children[i] = grandchild; 
+          free(child);
+          child = grandchild;
+        } while (child->op == op);
+
+        remove_op(grandchild, op, 0);   
+      }
+    } 
+    else
+    {
+      remove_op(child, op, first_encounter );
+    }
+  }
+  return;
+};
+
 
 
 int force_params_node(Node *tree, int i_param)
@@ -331,6 +375,10 @@ void user_functions(NodeScore ns)
 
 #if MARKER > 0
   force_at_marker_node(ns.node, 'Y' , MARKER);
+#endif
+
+#ifdef TANH_ONCE
+  remove_op(ns.node, 'T', 1);
 #endif
 
 #if defined(STEM_NODES) && defined(CURTAILFORCING)

@@ -2833,6 +2833,7 @@ void c_nextgen(int my_number,int qsubs,int runlen,int popsize, int compgridsize,
       else
       {
         newns = makerandomns(MAXDEPTH,FPR,PPR, Exp);
+        user_functions(newns);
       }
 
       size = tree_consts(newns.node, consts,nconsts,CONSTSCUTOFF); /* fill consts array */

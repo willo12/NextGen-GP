@@ -449,8 +449,8 @@ void c_map_f(char *treestring, double *A, double *B, int shape_i, int shape_j, d
 
   init_tables();
 
-  reg[0] = -2.0;
-  reg[1] = -2.0;
+  reg[0] = S0_start;
+  reg[1] = S1_start;
   for (i=0;i<forcing_dim;i++)
   {
     reg[2+i] = *(forcing+i);
@@ -483,7 +483,7 @@ void c_map_f(char *treestring, double *A, double *B, int shape_i, int shape_j, d
 
   for (j=0;j<shape_j;j++)
   {
-    reg[0] = -2.0;
+    reg[0] = S0_start;
     for (i=0;i<shape_i;i++)
     {
       
