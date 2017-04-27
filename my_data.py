@@ -179,7 +179,7 @@ def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/pape
 
   raw_obs[:,1] = mul_fac*raw_obs[:,1]
 
-  if (abs(raw_obs[2,0] - raw_obs[1,0]) <= 1):   # REMOVE THIS LATER, AND REQUIRE FILE STANDARD IN YRS 
+  if (abs(raw_obs[2,0] - raw_obs[1,0]) <= 10):   # REMOVE THIS LATER, AND REQUIRE FILE STANDARD IN YRS 
     raw_obs[:,0] = raw_obs[:,0]*1000 # from kyr to yr
     print("Data not in yrs, ts=%.2f, converting from assumed kyr."%abs(raw_obs[2,0] - raw_obs[1,0]))
 #  else:
@@ -214,7 +214,7 @@ def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/pape
           print("Obs t_start found, index %d"%i_obs_start)
         else:
           i_obs_start = 0
-          warnings.warn("Warning! Obs t_start not found, setting i_obs_start index to %d"%i_obs_start)
+          warnings.warn("Warning! Obs t_start %d not found, setting i_obs_start index to %d"%(t_start,i_obs_start))
     else:
       print("Obs t_start found, index %d"%i_obs_start)
 
