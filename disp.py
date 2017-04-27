@@ -30,6 +30,7 @@ runlen = 4
 
 config = load_config()
 qsubs = config['driver']['qsubs']
+max_inter_qsubs = config['driver']['max_inter_qsubs']
 
 pbs_name = config['driver']['pbs_name']
 
@@ -44,6 +45,10 @@ else:
     use_pbs = True
 
 prep_data(config) # create local data files
+
+if not use_pbs:
+  if qsubs > max_inter_qsubs:
+    raise Exception("Refusing to launch %d interactive jobs: exceeds set max of %d"%(qsubs,max_inter_qsubs))
 
 # submit the jobs
 for i in xrange(qsubs):
