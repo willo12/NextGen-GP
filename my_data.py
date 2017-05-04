@@ -211,16 +211,16 @@ def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/pape
     if not isinstance(i_obs_start,int):
         if len(i_obs_start) > 0:
           i_obs_start = i_obs_start[0]
-          print("Obs t_start found, index %d"%i_obs_start)
+          print("t_start=%d found in obs at index=%d"%(t_start, i_obs_start))
         else:
           i_obs_start = 0
-          warnings.warn("Warning! Obs t_start %d not found, setting i_obs_start index to %d"%(t_start,i_obs_start))
+          warnings.warn("Warning! t_start=%d not found in obs, setting i_obs_start=%d"%(t_start,i_obs_start))
     else:
-      print("Obs t_start found, index %d"%i_obs_start)
+      print("t_start=%d found in obs at index=%d"%(t_start, i_obs_start))
 
   else:
     i_obs_start = 0
-    warnings.warn("Warning! Obs t_start not found, setting i_obs_start index to %d"%i_obs_start)
+    warnings.warn("Warning! t_start=%d not found in obs, setting i_obs_start=%d"%(t_start, i_obs_start))
 
   obs = obs[i_obs_start:,:]
 
@@ -244,11 +244,11 @@ def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/pape
         if not isinstance(i_forc_start,int):
             if len(i_forc_start)>0:
               i_forc_start = i_forc_start[0]        
-              print("Forcing t_start found, index %d"%i_forc_start)
+              print("t_start=%d found in forcing at index=%d"%(t_start, i_forc_start))
             else:
               i_forc_start = 0
               # should we raise an exception here?
-              warnings.warn("Warning! Forcing t_start not found, set index %d. Check length forcing file. WRONG LENGTH COULD YIELD A SEG FAULT!"%i_forc_start)
+              warnings.warn("Warning! t_start=%d not found in forcing, setting index=%d. Check length forcing file. WRONG LENGTH COULD YIELD A SEG FAULT!"%(t_start, i_forc_start) )
 
 
     except:
@@ -256,7 +256,7 @@ def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/pape
 
   else:
     i_forc_start = 0
-    warnings.warn("Warning! Forcing t_start not found, set index %d. Check length forcing file."%i_forc_start)
+    warnings.warn("Warning! t_start=%d not found in forcing, setting index=%d. Check length forcing file."%(t_start, i_forc_start))
 
   slice_ffs_time = slice(i_forc_start,None)  # single slice for time dimension
 
@@ -295,8 +295,6 @@ def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/pape
   dt_forc = abs(Iffs[1,0] - Iffs[0,0])
 
   I = get_grid(np.squeeze(obs[:,0]), dt=dt_forc, t0 = t_start, t_end = t_end) # I subset of Iffs times, must have same length as obs[:,0]
-
-  
 
   if I.shape[0] > obs.shape[0]: # c code will compare result[I[i]] values to obs[i], so must match
     raise Exception("Data Setting Error: I must be shorter than obs. All obs time steps must be divisible by dt_forc. Also, t_start (%d vs obs %d) must be within data file range. Shape I: %s, shape obs: %s."%(t_start, obs[0,0], I.shape[0] , obs.shape[0]))

@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
         i += 1
         if len(sys.argv) > i:
-          obs = int(sys.argv[i])
+          obs = sys.argv[i]
 
           i += 1
           if len(sys.argv) > i:
@@ -79,9 +79,10 @@ if __name__ == "__main__":
 
   Iffs,result,obs_other,I, tree,ts_factor,startscore_i, S_init, otime, scores = single_run(tree=tree,config = config, S_init_array = S_init_array)
 
+  result_plot = result[I[startscore_i:],:]
 
-
-
+  for i in range(result_plot.shape[1]):
+    print "series %d: max: %g min: %g"%(i,max(result_plot[:,i]) , min(result_plot[:,i]) )
 
   obs = np.loadtxt("obs")
   if len(obs.shape) == 1:
@@ -101,8 +102,8 @@ if __name__ == "__main__":
 #  plt.plot(otime*1e-3,obs[startscore_i:,1],'g'); # note: obs has been re-indexed
 #  plt.plot(-A[:,1],A[:,2],'g')
   c1, = plt.plot(otime*1e-3,obs[startscore_i:,0],'b'); # plot obs
-  c2, = plt.plot(otime*1e-3,result[I[startscore_i:],0],'r'); 
-  c3, = plt.plot(otime*1e-3,result[I[startscore_i:],1],'g'); 
+  c2, = plt.plot(otime*1e-3,result_plot[:,0],'r'); 
+  c3, = plt.plot(otime*1e-3,result_plot[:,1],'g'); 
 #  plt.plot(otime*1e-3,result[I[startscore_i:],2],'y'); 
 
 

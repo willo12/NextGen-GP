@@ -16,6 +16,19 @@ import nextgen
 
 import subprocess
 
+def add_col(A, col_A=None):
+  """
+  Enlarge np array A by 1 column and fill with col_A
+  """
+
+  B = np.zeros((A.shape[0], A.shape[1]+1))
+
+  B[:,:-1] = A
+  if col_A is not None:
+    B[:,-1] = np.squeeze(col_A)
+
+  return B 
+
 def load_config():
   # get directory component of pathname using dirname (would get the file with basename)
   dir_path = os.path.dirname(os.path.realpath(__file__)) # get the canonical path to current file (shortest absolute).
@@ -257,7 +270,7 @@ def get_config(config):
 
 def prep_run(config):
   """
-  Prepare to run tree from c
+  Prepare to run tree from c. Calls specific IO function from my_data.py
 
   
   """
@@ -279,13 +292,16 @@ def prep_run(config):
 
   return Iffs, obs,I, startscore_i, result, otime
 
-def prep_data(config=None):
+
+
+def prep_data(config=None, write_otime = False):
 
   if config is None:
     config = load_config()
 
   S_init = config['driver']['S_init']
   ts_factor = config['glacial']['ts_factor']
+  add_trend = config['driver']['add_trend']
   add_random_col = config['driver']['add_random_col']
 
   if add_random_col == 0:
@@ -295,28 +311,34 @@ def prep_data(config=None):
 
   spacedim = config['state']['spacedim']
 
-  if add_random_col:
-    Iffs_small, obs,I, startscore_i, result, otime = prep_run(config)
+  Iffs, obs,I, startscore_i, result, otime = prep_run(config)
 
-    s = Iffs_small.shape
+  if add_random_col:
+    # grow forcing Iffs with column containing random numbers
 
     mean=0
     std=1
-    samples = np.random.normal(mean,std,size=s[0])
+    samples = np.random.normal(mean,std,size=Iffs_small.shape[0])
   
-    Iffs = np.zeros((s[0],s[1]+1))
-    Iffs[:,:-1] = Iffs_small
-    Iffs[:,-1] = samples
-  else:
-    Iffs, obs,I, startscore_i, result, otime = prep_run(config)
+    Iffs = add_col(Iffs, samples)
 
+
+  if add_trend>0:
+
+    model = np.polyfit(otime, obs[:,0],add_trend)
+    fit = np.polyval(model,np.squeeze(Iffs[:,0]))   
+
+    Iffs = add_col(Iffs, fit)
 
   write_array("Iffs",Iffs)
   write_array("obs",obs)
   write_array("I",I)
 
-
   write_array("params",np.array([startscore_i, S_init, ts_factor]),fmt='%0.3g')
+
+  if write_otime:
+    write_array("otime",otime)
+
 
 def batch_run(my_number,config=None, subprocflag = False):
   """ Run the main GP loop on one node.
