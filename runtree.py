@@ -18,6 +18,10 @@ from validate import Validator
 
 #from spacegrids import dlmread
 
+colors = ['b','r','g','y','c']
+
+descr = ['obs','$S_1$','$S_2$','$S_3$','$S_4$']
+
 MIS = [('19',-787.0),('17',-707.0),('15c',-624.4),('15a',-579.6), ('13',-499.0), ('11',-424.8),('9',-335.5),('7e',-243.8),('7c',-214.7),('5',-131.4),('1',-11.7)]
 
 HOME = os.getenv("HOME")
@@ -79,6 +83,9 @@ if __name__ == "__main__":
 
   Iffs,result,obs_other,I, tree,ts_factor,startscore_i, S_init, otime, scores = single_run(tree=tree,config = config, S_init_array = S_init_array)
 
+  if len(result.shape)==1:
+    result.shape = (result.shape[0],1)
+
   result_plot = result[I[startscore_i:],:]
 
   for i in range(result_plot.shape[1]):
@@ -101,9 +108,17 @@ if __name__ == "__main__":
 
 #  plt.plot(otime*1e-3,obs[startscore_i:,1],'g'); # note: obs has been re-indexed
 #  plt.plot(-A[:,1],A[:,2],'g')
-  c1, = plt.plot(otime*1e-3,obs[startscore_i:,0],'b'); # plot obs
-  c2, = plt.plot(otime*1e-3,result_plot[:,0],'r'); 
-  c3, = plt.plot(otime*1e-3,result_plot[:,1],'g'); 
+
+
+  c, = plt.plot(otime*1e-3,obs[startscore_i:,0],colors[0]); # plot obs
+
+  handles = [c,]
+
+  for i in range(result.shape[1]):
+    c, = plt.plot(otime*1e-3,result_plot[:,0],colors[i+1]); 
+    handles.append(c)
+
+#  c3, = plt.plot(otime*1e-3,result_plot[:,1],'g'); 
 #  plt.plot(otime*1e-3,result[I[startscore_i:],2],'y'); 
 
 
@@ -118,7 +133,7 @@ if __name__ == "__main__":
 
   dt = 80
   plt.xticks(np.arange(-800,dt,dt))
-  plt.legend([c1,c2,c3],['obs','$S_1$','$S_2$'],loc=2)
+  plt.legend(handles,[e for e in descr[:result.shape[1]+1]],loc=2)
 
   plt.grid();
 

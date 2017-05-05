@@ -244,11 +244,11 @@ void update_regs(State S,int n, int steps_forc, double *ffs)
 
 #if FORCING_TERMS > 0 // optimization for known hard coded number of forcing terms
  #if FORCING_TERMS == 1
-    reg[2] = ffs[steps_forc*(FORCING_TERMS+1)+1]; // cols in Iffs forcing file are FORCING_TERMS+1. We pick 2nd col.
+    reg[SPACEDIM] = ffs[steps_forc*(FORCING_TERMS+1)+1]; // cols in Iffs forcing file are FORCING_TERMS+1. We pick 2nd col.
  #else
   for (i=0;i<FORCING_TERMS;i++)
   {
-    reg[2+i] = ffs[steps_forc*(FORCING_TERMS+1)+1+i];
+    reg[SPACEDIM+i] = ffs[steps_forc*(FORCING_TERMS+1)+1+i];
   }
  #endif
 
@@ -260,9 +260,9 @@ void update_regs(State S,int n, int steps_forc, double *ffs)
 #if defined INTERP_FORCING && FORCING_TERMS==0 
     double remainder;
     remainder = t_elapsed - forcing_t*dt_forc;
-    reg[2+i] = ffs[steps_forc*n+1+i] + remainder*(ffs[(steps_forc+1)*n+1+i] - ffs[steps_forc*n+1+i])/dt_forc;
+    reg[SPACEDIM+i] = ffs[steps_forc*n+1+i] + remainder*(ffs[(steps_forc+1)*n+1+i] - ffs[steps_forc*n+1+i])/dt_forc;
 #else
-    reg[2+i] = ffs[steps_forc*n+1+i];
+    reg[SPACEDIM+i] = ffs[steps_forc*n+1+i];
 #endif
   }
 
