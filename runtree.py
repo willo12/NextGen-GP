@@ -115,7 +115,7 @@ if __name__ == "__main__":
   handles = [c,]
 
   for i in range(result.shape[1]):
-    c, = plt.plot(otime*1e-3,result_plot[:,0],colors[i+1]); 
+    c, = plt.plot(otime*1e-3,result_plot[:,i],colors[i+1]); 
     handles.append(c)
 
 #  c3, = plt.plot(otime*1e-3,result_plot[:,1],'g'); 

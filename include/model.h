@@ -5,6 +5,7 @@
 //#define INTCONSTS
 #define STEM_NODES
 #define SPACEDIM 2   // spatial dimension of dynamical system
+
 //#define MAXINT 20
 
 #define INSTRSET_RARE

@@ -23,6 +23,9 @@ typedef struct field_int {
 
 } FieldInt;
 
+int min(int x, int y);
+int max(int x, int y);
+
 char* stradd(const char* a, const char* b);
 double rational_tanh(double x);
 
@@ -40,6 +43,7 @@ int free_field(Field F);
 int free_int_field(FieldInt F);
 Field read_array(char *filepath);
 FieldInt read_array_int(char *filepath);
+void copy_field(Field F_from, Field F_to);
 int write_array(Field F, char *filepath);
 
 Field check_field(Field F);

@@ -46,7 +46,7 @@ char par_op_char = 'P';
 int numpar;
 
 // SPECIFIC TO ops_muldim!! CHANGE LATER
-double buffers[STACKSIZE][SPACEDIM];
+//double buffers[STACKSIZE][SPACEDIM];
 
 // local function definitions
 void update_regs(State S, int n, int steps_forc, double *ffs);

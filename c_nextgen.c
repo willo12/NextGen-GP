@@ -203,17 +203,6 @@ becomes
 }
 
 
-/*Function to find minimum of x and y*/
-int min(int x, int y)
-{
-  return y ^ ((x ^ y) & -(x < y));
-}
- 
-/*Function to find maximum of x and y*/
-int max(int x, int y)
-{
-  return x ^ ((x ^ y) & -(x < y)); 
-}
 
 Point make_point(int x, int y)
 {
@@ -1509,7 +1498,7 @@ int migrants2buffer(Population pop, int i_iofile , int migrants ,int compgridsiz
 
   {  // modified exchange towards x+1
 
-    for (i=0;i<migrants/16;i++)
+    for (i=0;i<migrants;i++)
     { // loop over all migrants to output
 
       boundary_loc = get_boundary(i_iofile, i, pop.max_loc, migrants); // internal cell boundary
@@ -3018,7 +3007,7 @@ int main ( int argc, char *argv[] )
  
     if ( argc != 9 ) /* argc should be 7 for correct execution */
     {
-        printf( "usage: %s my_number qsubs runlen popsize compgridsize mutationrate tour\n", argv[0] );
+        printf( "usage: %s my_number qsubs runlen popsize compgridsize mutationrate tour S_init \n", argv[0] );
     }
     else 
     {

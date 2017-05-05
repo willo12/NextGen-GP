@@ -21,8 +21,6 @@ extern int node_count;
 
 // global function definitions
 void split(char text[],int *I, char left_bracket, char delim);
-int min(int x, int y);
-int max(int x, int y);
 
 Point i2point(int i, int max_x);
 int *make_int(int value);

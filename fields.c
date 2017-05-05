@@ -10,6 +10,19 @@
 
 // should go into separate utilities file, or call fields.c fields_and_utilities.c
 
+/*Function to find minimum of x and y*/
+int min(int x, int y)
+{
+  return y ^ ((x ^ y) & -(x < y));
+}
+ 
+/*Function to find maximum of x and y*/
+int max(int x, int y)
+{
+  return x ^ ((x ^ y) & -(x < y)); 
+}
+
+
 char* stradd(const char* a, const char* b){
 /* from stack overflow  */
 
@@ -461,7 +474,22 @@ FieldInt read_array_int(char *filepath)
 
 
 
+void copy_field(Field F_from, Field F_to)
+{
+  int i,j, rows, cols;
 
+  rows = min(F_from.dims.rows,F_to.dims.rows);
+  cols = min(F_from.dims.cols,F_to.dims.cols);
+
+  for (i=0;i<rows;i++)
+  {
+    for (j=0;j<cols;j++)
+    {
+      *(F_to.data + i*F_to.dims.cols + j  ) = *(F_from.data + i*F_from.dims.cols + j  );
+    }
+  }
+
+}
 
 int write_array(Field F, char *filepath)
 {
