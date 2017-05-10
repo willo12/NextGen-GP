@@ -536,19 +536,35 @@ double score_fun_basic(Experiment Exp)
 
   error = 0;
 
+#if OBSCOLS == 1
+  for (j=Exp.startscore_i;j<Exp.I.dims.rows;j++)
+  {      
+ /*   fprintf(stderr,"%g # ",obs[j*Exp.obs.cols+1]);  */
+
+    tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+k] - Exp.result.data[Exp.I.data[j]*SPACEDIM+k];
+    error += tmp_error0*tmp_error0*weights[k];
+
+  //    error += abs(tmp_error0)*weights[k];
+
+  }
+
+
+#else
   for (k=0;k<Exp.obs.dims.cols;k++)  /* number of obs columns must not exceed SPACEDIM! */
   {
     for (j=Exp.startscore_i;j<Exp.I.dims.rows;j++)
     {      
- /*   fprintf(stderr,"%g # ",obs[j*Exp.obs.cols+1]);  */
-
       tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+k] - Exp.result.data[Exp.I.data[j]*SPACEDIM+k];
       error += tmp_error0*tmp_error0*weights[k];
+
+ //     fprintf(stderr,"(%d, %g) ", k,error);  
 
   //    error += abs(tmp_error0)*weights[k];
 
     }
   }
+
+#endif
 
   return 1000.0*error/(Exp.I.dims.cols*Exp.I.dims.rows);
 }

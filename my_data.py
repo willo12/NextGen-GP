@@ -8,12 +8,18 @@ import warnings
 def norm(series):
 #  return series
 
-    if (len(series) == 0):
-      raise Exception("Error: time series must be non-empty")
+  if (len(series) == 0):
+    raise Exception("Error: time series must be non-empty")
 
-    new_series = series - np.mean(series)   
+  new_series = series - np.mean(series)   
 
-    return 2*(new_series)/max(abs(new_series))
+  return 2*(new_series)/max(abs(new_series))
+
+def norm_lambda(series):
+#  return series
+
+  return lambda S: 2*(S - np.mean(series))/max(abs(series - np.mean(series)))
+
 
 
 def norm_error(series):
@@ -163,7 +169,7 @@ def get_forcing(forcing_dir=os.environ['HOME'] + '/PROJECTS/paper_glac/',forcing
 
 
 
-def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/paper_glac/raymo_d18_trunc.txt',detrend=False,cols=[5,], home = os.environ['HOME'], t_start = -int(2.5e6),forcing_substeps=2, random_comp = 0.0):
+def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/paper_glac/raymo_d18_trunc.txt',obs_error=-1,detrend=False,cols=[5,], home = os.environ['HOME'], t_start = -int(2.5e6),forcing_substeps=2, random_comp = 0.0):
   """
   Example: obs_file = 'PROJECTS/paper_glac/epica_T.txt__mul__-1' multiplies series by -1
   """
@@ -224,8 +230,16 @@ def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/pape
 
   obs = obs[i_obs_start:,:]
 
-  for i in range(1,obs.shape[1]):
+  if obs_error > 0:
+    obs[:,1] = norm(obs[:,1]-obs_error*obs[:,2])  
+    obs[:,2] = norm(obs[:,1]+obs_error*obs[:,2])  
+
+  else:
+    for i in range(1,obs.shape[1]):
       obs[:,i] = norm(obs[:,i])
+
+    if obs_error == -1:
+      obs = obs[:,:-1]
 
   ffs = get_forcing(forcing_files = forcing_files, random_comp = random_comp)  # expecting data in yr
 
@@ -363,8 +377,6 @@ def glacial(smooth=0,t_obs=0,t_forc=0, t_start = -int(2.5e6), dt=50, startscore_
     obs = obs_tmp
 
   if startscore_t is not None:
-
-
 
     startscore_i=np.where(obs[:,0]==startscore_t)[0]  
     if len(startscore_i)>0:     # detect a common time point

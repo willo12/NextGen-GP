@@ -6,11 +6,12 @@
 
 #define TANH_ONCE
 #define INTPARS 0
+#define OBSCOLS 1
 #define EVOLVEIC
 
 //#define CUSTOM_NODES
 #define TS_FACTOR 2
-#define FORCING_TERMS 2
+#define FORCING_TERMS 1
 #define PARSIMONY 0.0 // to calculate effect of tree size on score
 #define DOUBLETRUNC 10000
 #define MAXTREESTR 10000  // max size tree string
