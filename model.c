@@ -526,13 +526,6 @@ double score_fun_basic(Experiment Exp)
   int j,k;
   double error, tmp_error0;
  
-  double weights[10];
-
-  weights[0] = 0.6;
-  weights[1] = 0.4; 
-  weights[2] = 0;
-  weights[3] = 0;
-  weights[4] = 0;
 
   error = 0;
 
@@ -541,11 +534,29 @@ double score_fun_basic(Experiment Exp)
   {      
  /*   fprintf(stderr,"%g # ",obs[j*Exp.obs.cols+1]);  */
 
+# ifdef OBSERROR
+
+    tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+k] - Exp.result.data[Exp.I.data[j]*SPACEDIM+k]; // error relative to lower bound
+    if (tmp_error0 > 0) // result lies below lower bound obs
+    {
+      tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+k] - Exp.result.data[Exp.I.data[j]*SPACEDIM+k];
+      error += tmp_error0*tmp_error0;
+    }
+    else 
+    {
+      tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+k+1] - Exp.result.data[Exp.I.data[j]*SPACEDIM+k]; // error relative to upper bound
+      if (tmp_error0 < 0) // result lies above upper bound obs
+      {
+        error += tmp_error0*tmp_error0;
+      }
+    }
+
+# else
     tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+k] - Exp.result.data[Exp.I.data[j]*SPACEDIM+k];
-    error += tmp_error0*tmp_error0*weights[k];
+    error += tmp_error0*tmp_error0;
+# endif
 
-  //    error += abs(tmp_error0)*weights[k];
-
+ 
   }
 
 
@@ -555,11 +566,9 @@ double score_fun_basic(Experiment Exp)
     for (j=Exp.startscore_i;j<Exp.I.dims.rows;j++)
     {      
       tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+k] - Exp.result.data[Exp.I.data[j]*SPACEDIM+k];
-      error += tmp_error0*tmp_error0*weights[k];
+      error += tmp_error0*tmp_error0;
 
  //     fprintf(stderr,"(%d, %g) ", k,error);  
-
-  //    error += abs(tmp_error0)*weights[k];
 
     }
   }

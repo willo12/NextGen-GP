@@ -8,6 +8,7 @@
 #define INTPARS 0
 #define OBSCOLS 1
 #define EVOLVEIC
+#define OBSERROR
 
 //#define CUSTOM_NODES
 #define TS_FACTOR 2
