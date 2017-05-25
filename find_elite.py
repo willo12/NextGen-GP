@@ -29,11 +29,35 @@ def get_elite(name,qsubs=400,i_end=-1, dtype={'names':('score','col','S_init','t
 
   return min(L)
 
-def extract_elite(name,qsubs=400,i_end=-1, substring_filter='' , dtype={'names':('score','col','S_init','tree'),'formats':('f4','S10000','S10000','S10000')}, names = None , data_dir = 'DATA'):
+def extract_elite(name,qsubs=400,i_end=-1, substring_filter='' , dtype={'names':('score','col','S_init','tree'),'formats':('f4','S10000','S10000','S10000')}, names = None , data_dir = 'DATA', verbose=False):
+
+  """
+  Compile score (f4), col (string), S_init (string) and tree (string) from collection of elite NextGen output files.
+
+  Inputs:
+	name: directory name where elite files are kept
+	qsubs: number of elite files
+	i_end: index at which to record data in extraction output
+	substring_filter: word that should not occur in tree
+	dtype: standard dtype argument to np.loadtxt
+	names: names to override names key in dtype
+	data_dir: dir where data is kept
+
+  Often, col is not included in dtype argument, yielding just: ('score','S_init','tree').
+
+  Change selection of columns by providing names argument, which corresponds to np.loadtxt dtype names.
+
+  Returns list L of small lists, with elements L[i] being [score, col, S_init, tree] at end of elite file i.
+
+  """
+
 
   HOME = os.environ['HOME']
 
   path = os.path.join(HOME,data_dir,name,'elite%d')
+
+  if verbose:
+    print "Extracting from %s"%path
 
   if names is None:
     names = dtype['names']
@@ -44,8 +68,6 @@ def extract_elite(name,qsubs=400,i_end=-1, substring_filter='' , dtype={'names':
 
     series=np.loadtxt(path%i,dtype = dtype )
     try:
-         
-
       L.append( [series[name][i_end] for name in names ]  )
     except:
       print "Problem for %s"%series
@@ -132,9 +154,7 @@ def elite_cluster(name,qsubs=400,i_end=-1, substring_filter='', tolerance=10, dt
 def freq_array(x):
 
   y = np.bincount(x)
-
   ii = np.nonzero(y)[0]
-
   return zip(ii,y[ii])
 
 
@@ -157,32 +177,23 @@ def best_per_int_par(L, n_int_par=21):
 
   return np.array(result)
 
-def elite_freq(name,qsubs=400,i_end=-1, substring_filter='', tolerance=10, dtype={'names':('score','col','S_init','tree'),'formats':('f4','S10000','S10000','S10000')} , d_min=50):
+
+
+
+def elite_int_pars(name,qsubs=400,i_end=-1, substring_filter='', tolerance=10, dtype={'names':('score','col','S_init','tree'),'formats':('f4','S10000','S10000','S10000')} , d_min=50, SPACEDIM=2):
 
   """
-  find frequencies of parameters for lat runs
-     
-  """
-
-# L becomes [score, int_par_string, ic_string, tree_string]
-# all elites at iteration i_end
-  L = extract_elite(name,qsubs,i_end, substring_filter, dtype = dtype )  
-
-# record each int_par, multiple times if need be
-  preferred_cols = np.array([ int(e[1].strip("()"))  for e in L  ])
-
-# return frequencies of each int_par
-  return freq_array(preferred_cols)
-
-
-def elite_int_pars(name,qsubs=400,i_end=-1, substring_filter='', tolerance=10, dtype={'names':('score','col','S_init','tree'),'formats':('f4','S10000','S10000','S10000')} , d_min=50):
-
-  """
-  find frequencies of parameters for lat runs
+  Find frequencies of parameters for lat runs when force_params_node is called due to INT_PARS>0 in my_ops.c in NextGen, and so all forcing terms are made equal to int_par in trees.
      
 
+  Example: [(16, 3), (17, 1), (18, 4), (19, 2), (20, 3), (21, 87)]
+
+  Returns frequency array of columns (index as in j_40north_trunc.txt*1e3^6 etc) used across all elite files at i_end (often i_end = -1).
+
   """
 
+  # start index for each latitude file by latitude: used to produce correct column
+  # e.g. for lat 40, start index is 6, corresponding to forcing_files = 'j_40north_trunc.txt*1e3^6-7-8-9-...'
   I_start = {0:14, 10:12, 15:11, 20:10, 25:9, 30:7 ,35:7, 40:6, 45:5, 50:3, 55:2, 60:1, 65:1, 70:1 }
 
   # improve later with regex and checks
@@ -191,13 +202,35 @@ def elite_int_pars(name,qsubs=400,i_end=-1, substring_filter='', tolerance=10, d
 
   i_start = I_start[lat]
 
-
+  # obtain long list L (of length qsubs) of small lists of format [ [score, col, S_init, tree], ... ]
   L = extract_elite(name,qsubs,i_end, substring_filter, dtype = dtype , data_dir = os.path.join("DATA","TEST_LAT"))  
 
-  preferred_cols = np.array([ int(e[1].strip("()")) + i_start -2 for e in L  ])
+  # extract recorded col (parameter index) entry and correct for first columns used up by space variables in output (which counts S0 and S1 for p0 and p1, and then assigns p2 to column i_start in forcing file)
+  # list has length qsubs, and records col of tree for each elite file 
+  preferred_cols = np.array([ int(e[1].strip("()")) + i_start -SPACEDIM for e in L  ])
 
   return freq_array(preferred_cols)
 
+def L2struct_array(L,dtype={'names':('score','col','S_init','tree'),'formats':('f4','S10000','S10000','S10000')}):
+  """
+  Convert list output from extract_elite to structured Numpy array.
+
+  Contracts initial conditions string with tree string. Converts column string to int (after removing brackets).
+
+  Inputs:
+	L: list of short lists, each containing score, col, S_init and tree.
+
+  """
+
+  return np.array([ (e[0], int(e[1].strip("()")), "%s %s"%(e[2], e[3]) ) for e in L ], dtype = [('score', 'f4'), ('col','i4'), ('ic_tree','S10000') ])
+
+
+def L2array(L):
+  """
+
+  """
+
+  return np.array([ [ e[0], float(e[1].strip("()"))  ] for e in L ])
 
 
 if __name__ == "__main__":
@@ -213,7 +246,6 @@ if __name__ == "__main__":
 
       if len(sys.argv) > 3:
         i_end = int(sys.argv[3])
-
 
         if len(sys.argv) > 4:
           if sys.argv[4] == 'int_pars':

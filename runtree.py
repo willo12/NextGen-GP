@@ -33,6 +33,11 @@ show_flag = True
 iteration = '30'
 obs = 'SL'
 
+def find_nearest(array,value):
+    return (np.abs(array-value)).argmin()
+#    return array[idx]
+
+
 if __name__ == "__main__":
 
 #  print(sys.path)
@@ -40,6 +45,7 @@ if __name__ == "__main__":
 #  sys.path.remove(dir_path)
 
   result_file = 'result'
+  show_MIS = False
 
   print('run locally from %s'%dir_path)
 
@@ -83,6 +89,8 @@ if __name__ == "__main__":
 
   Iffs,result,obs_other,I, tree,ts_factor,startscore_i, S_init, otime, scores = single_run(tree=tree,config = config, S_init_array = S_init_array)
 
+  otime = otime*1e-3
+
   if len(result.shape)==1:
     result.shape = (result.shape[0],1)
 
@@ -95,44 +103,30 @@ if __name__ == "__main__":
   if len(obs.shape) == 1:
     obs = obs.reshape( (len(obs),1) )
 
-#  print('Score: %g, Starting obs time: %d, I[startscore_i]: %d, t0: %d, S_init: %g, ts_factor: %s'%(scores[0],obs[0,0] , I[startscore_i] ,Iffs[0,0] , S_init, str(ts_factor)  ) )
-
-#  print ("startscore_i: %d %d"%(startscore_i, result[I[startscore_i]]))
- 
-  #pickle.dump({'result':result, 'Iffs':Iffs,'I':I,'startscore_i':startscore_i,'otime':otime,'obs':obs},open("result.p","wb"))
-
-#  F = lambda x: 2*(x - np.nanmin(x))/(np.nanmax(x)-np.nanmin(x))
-#  A=np.loadtxt('/home/wim/PROJECTS/paper_glac/edc-dust2008.txt');A[:,2] = F(A[:,2])
-
   fig = plt.figure(1)
 
-#  plt.plot(otime*1e-3,obs[startscore_i:,1],'g'); # note: obs has been re-indexed
-#  plt.plot(-A[:,1],A[:,2],'g')
-
-
-  c, = plt.plot(otime*1e-3,obs[startscore_i:,0],colors[0]); # plot obs
+  c, = plt.plot(otime,obs[startscore_i:,0],colors[0]); # plot obs
 
   handles = [c,]
 
   for i in range(result.shape[1]):
-    c, = plt.plot(otime*1e-3,result_plot[:,i],colors[i+1]); 
+    c, = plt.plot(otime,result_plot[:,i],colors[i+1]); 
     handles.append(c)
 
-#  c3, = plt.plot(otime*1e-3,result_plot[:,1],'g'); 
-#  plt.plot(otime*1e-3,result[I[startscore_i:],2],'y'); 
 
+  if show_MIS:
+    for i, mis in enumerate(MIS):
+      i_mis = find_nearest(otime,mis[1])
+      plt.plot(mis[1],result_plot[i_mis,1] ,'ko')
 
-  for mis in MIS:
-    plt.plot(mis[1],-1.8,'ko')
-
-    plt.text(mis[1]-10,-2.1,mis[0])
+      plt.text(mis[1]-10,-2.1+0.12*(i%2),mis[0],fontsize=9)
 
   plt.xlabel('Time kyr BP');plt.ylabel('(scaled)');
   axes = plt.gca()
   axes.set_ylim([-2.2,2.5])  
 
-  dt = 80
-  plt.xticks(np.arange(-800,dt,dt))
+  dt = (otime[-1]-otime[0])/10
+  plt.xticks(np.arange(otime[0],dt,dt))
   plt.legend(handles,[e for e in descr[:result.shape[1]+1]],loc=2)
 
   plt.grid();

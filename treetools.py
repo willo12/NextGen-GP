@@ -74,7 +74,7 @@ def newick2Latex(text, index_start=0):
 
 def newick2human(text, pieces = None, SPACEDIM=2, index_start=0,dtype=float):
 
-  strings = {'V':'[%s , %s]','A':'(%s + %s)','S':'(%s - %s)','M':'%s %s','D':'%s / %s','Q': '\sqrt{%s}','I':'%s $ for $ %s>0 $ and $ %s $ otherwise $ '}
+  strings = {'V':'[%s , %s]','A':'(%s + %s)','S':'(%s - %s)','M':'%s %s','D':'%s / %s','Q': '\sqrt{%s}','I':'%s $ for $ %s>0 $ and $ %s $ otherwise $ ', 'T':'tanh(%s)'}
 
   leaf_ops = {'Q':'\sqrt','E':'e','O':'1/','T':'tanh','L':'log'}
 

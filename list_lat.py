@@ -8,4 +8,4 @@ if __name__ == "__main__":
 
   for lat in lats:
 
-    print "%d: %s"%(lat, elite_int_pars('RAYMO/TEST%d'%lat,81))
+    print "%d: %s"%(lat, elite_int_pars('TEST%d'%lat,100))
