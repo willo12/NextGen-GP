@@ -645,6 +645,11 @@ Node *make_run_node(Node *tree)
 
 Node *copy_node(Node *tree)
 {
+  /* Copy a node including its subtrees, and allocate memory using talloc for all nodes involved.
+
+  */
+
+  // jump on copy_table defined in my_ops.c, providing appropriate recursion.
   return (*copy_table[tree->op])(tree);
 
 };

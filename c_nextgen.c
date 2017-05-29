@@ -84,6 +84,9 @@ Point calc_max_p(int max_i);
 Node* node_from_str_lit(char tree_str[]);
 int test_tree_io(void);
 
+int make_test_tree(char test_tree_str[]);
+int make_test_tree_double(char test_tree_str[]);
+
 Node *pick_F(Node *t, int max_i);
 int export_internal(Population pop, Point my_loc, Point dest_loc, int tour, int compgridsize, int migrants);
 int internal_migration(Population pop, int tour, int compgridsize, int migrants);
@@ -436,6 +439,40 @@ Node *talloc(void)
   return newtree;
 };
 
+int make_test_tree_double(char test_tree_str[])
+{
+  char tmp_str[MAXTREESTR];
+  Node *player;
+  int i; 
+
+  State S_result = make_state(SPACEDIM);
+
+  sprintf(tmp_str, "%s",test_tree_str  );  
+  player = str2node(tmp_str,'(',',');
+
+  (*code2str_table[(int) player->op])(player,tmp_str);
+
+  evaluate_tree(player, S_result);
+
+
+  fprintf(stderr,"tree after conversion and back: %s\n",tmp_str); 
+
+  fprintf(stderr,"Result: (");
+  for (i=0;i<SPACEDIM-1;i++)
+  {
+    fprintf(stderr," %g, ", S_result.data[i]);
+  }
+  fprintf(stderr," %g ", S_result.data[SPACEDIM-1]);
+  fprintf(stderr,")\n");
+  fprintf(stderr,"Height %d\n",tree_height(player,0));
+
+  fprintf(stderr,"\n");
+
+  free_node(player);
+  return 0;
+}
+
+
 
 int make_test_tree(char test_tree_str[])
 {
@@ -476,13 +513,16 @@ int test_tree_io(void)
 
 #ifdef STEM_NODES
 
+  make_test_tree_double("(((5.1,(5.5,5.5)S)A,(3,3)S)S,3.2)V"  ); 
+
+
 #ifdef INTSTATES
 
 #else
 
 #endif
 
-//  make_test_tree("((5,4)A,(5,4)A)V"  );  
+//  make_test_tree_double("((5,4)A,(5,4)A)V"  );  
 #else
 
 #ifdef INTSTATES
@@ -490,12 +530,12 @@ int test_tree_io(void)
 
 #endif
 
-//  make_test_tree("((5,4)A,(5,4)A)V"  );  
-  make_test_tree("(5,4)A"  );  
+//  make_test_tree_double("((5,4)A,(5,4)A)V"  );  
+  make_test_tree_double("(5,4)A"  );  
 
-  make_test_tree("(4,5)A"  );  
-  make_test_tree("(5,4)S"  );  
-  make_test_tree("(5,4)M"  );  
+  make_test_tree_double("(4,5)A"  );  
+  make_test_tree_double("(5,4)S"  );  
+  make_test_tree_double("(5,4)M"  );  
 
 #endif
 

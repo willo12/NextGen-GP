@@ -16,6 +16,8 @@ extern Node* (*str2leaf_table[OPTABLE])(char text[], char left_bracket, char del
 
 Node *makerandomterminal(int maxdepth,double fpr,double ppr, int max_par);
 
+int tree_height(Node *tree, int height);
+
 void free_node(Node *t);
 int check_node(Node *t);
 int tree_consts(Node *t, double *consts[], int *current, int maxconsts);

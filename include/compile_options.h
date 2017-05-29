@@ -30,7 +30,7 @@
 //#define INTSTATES
 //#define MACHINE_FUNCTIONS
 
-//#define DEBUG
+#define DEBUG
 
 //#define SUPERLEAF
 

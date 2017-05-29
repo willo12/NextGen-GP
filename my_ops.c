@@ -268,6 +268,38 @@ void remove_op(Node *tree, char op, int first_encounter)
 
 
 
+int tree_height(Node *tree, int depth)
+{
+/* Determine tree height (maximum path from leaf to root)
+
+  */
+
+  int i;
+  Node *child;
+
+  if (arg_table[tree->op] > 0)
+  {
+    depth++; // every time a node has children, depth is increased by 1
+    int max_child_depth = 0;
+    for (i=0;i<arg_table[tree->op];i++) 
+    {
+      child = tree->children[i];
+      int depth_plus_child = tree_height(child, depth); // current depth
+
+      if (depth_plus_child > max_child_depth)
+      {
+        max_child_depth = depth_plus_child;
+      }
+    }  
+    return max_child_depth;
+  }
+
+  return depth;
+
+};
+
+
+
 int force_params_node(Node *tree, int i_param)
 {
 /*  alter existing tree to force all parameters with index greater than SPACEDIM to be set to i_param */
