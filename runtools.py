@@ -334,7 +334,7 @@ def prep_data(config=None, write_otime = False):
   if add_powers>1:
 
     for i in range(2,add_powers+1):
-      f_pow = np.squeeze(Iffs[:,1])**2
+      f_pow = np.squeeze(Iffs[:,1])**i
 
       Iffs = add_col(Iffs, f_pow)
 
