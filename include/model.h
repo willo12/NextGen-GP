@@ -16,7 +16,6 @@
 extern int numpar;
 extern int maxint;
 
-
 extern double buffers[STACKSIZE][SPACEDIM];
 
 
@@ -34,8 +33,6 @@ typedef struct experiment {
   State S_i;
 
 } Experiment;
-
-
 
 
 int model_init(Experiment Exp);

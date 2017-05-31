@@ -655,6 +655,40 @@ Node *copy_node(Node *tree)
 };
 
 
+Node *copy_node_nojump(Node *tree)
+{
+
+  if (tree->op == const_op_char)
+  {
+    return make_const_node(tree->op, *((double *) tree->children[0]) );
+  }
+  else if (tree->op == par_op_char)
+  {
+    return make_par_node(tree->op, *((int *) tree->children[0]) );
+  }
+  else
+  {
+    Node *newnode;
+    int i;
+    Node *child;
+
+    newnode=talloc();
+    newnode->op = tree->op;
+
+    for (i=0;i<arg_table[tree->op];i++) // no looping for childless nodes
+    {
+      child = ((Node *) tree->children[i]);
+      newnode->children[i] = copy_node_nojump(child);
+    }; 
+
+    return newnode;
+  }
+
+}
+
+
+
+
 
 int compare_const_nodes(char op, Node *t1, Node *t2)
 {

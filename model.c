@@ -221,11 +221,10 @@ void update_regs(State S,int n, int steps_forc, double *ffs)
 
   /* n: number of forcing terms plus time (so n=2 for one forcing term) */
 
-  int i;
-
 
   /* first registers reserved for state vector S */
 
+  int i;
 
 #if SPACEDIM == 1
     reg[0]=S.data[0];
@@ -233,6 +232,7 @@ void update_regs(State S,int n, int steps_forc, double *ffs)
     reg[0]=S.data[0];
     reg[1]=S.data[1];
 #else
+
   for (i=0;i<SPACEDIM;i++)  // SPACEDIM for speed
   {
     reg[i]=S.data[i];
@@ -523,7 +523,9 @@ int init_reg(Experiment Exp)
 
 double score_fun_basic(Experiment Exp)
 {
-  int j,k;
+
+  
+  int j;
   double error, tmp_error0;
  
 
@@ -536,15 +538,15 @@ double score_fun_basic(Experiment Exp)
 
 # ifdef OBSERROR
 
-    tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+k] - Exp.result.data[Exp.I.data[j]*SPACEDIM+k]; // error relative to lower bound
+    tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols] - Exp.result.data[Exp.I.data[j]*SPACEDIM]; // error relative to lower bound
     if (tmp_error0 > 0) // result lies below lower bound obs
     {
-      tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+k] - Exp.result.data[Exp.I.data[j]*SPACEDIM+k];
+      tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols] - Exp.result.data[Exp.I.data[j]*SPACEDIM];
       error += tmp_error0*tmp_error0;
     }
     else 
     {
-      tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+k+1] - Exp.result.data[Exp.I.data[j]*SPACEDIM+k]; // error relative to upper bound
+      tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+1] - Exp.result.data[Exp.I.data[j]*SPACEDIM]; // error relative to upper bound
       if (tmp_error0 < 0) // result lies above upper bound obs
       {
         error += tmp_error0*tmp_error0;
@@ -561,6 +563,7 @@ double score_fun_basic(Experiment Exp)
 
 
 #else
+  int k; // k to cycle through obs columns.
   for (k=0;k<Exp.obs.dims.cols;k++)  /* number of obs columns must not exceed SPACEDIM! */
   {
     for (j=Exp.startscore_i;j<Exp.I.dims.rows;j++)

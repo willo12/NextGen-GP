@@ -303,6 +303,7 @@ def prep_data(config=None, write_otime = False):
   ts_factor = config['glacial']['ts_factor']
   add_trend = config['driver']['add_trend']
   add_random_col = config['driver']['add_random_col']
+  add_powers = config['driver']['add_powers']
 
   if add_random_col == 0:
     add_random_col = False
@@ -329,6 +330,15 @@ def prep_data(config=None, write_otime = False):
     fit = np.polyval(model,np.squeeze(Iffs[:,0]))   
 
     Iffs = add_col(Iffs, fit)
+
+  if add_powers>1:
+
+    for i in range(2,add_powers+1):
+      f_pow = np.squeeze(Iffs[:,1])**2
+
+      Iffs = add_col(Iffs, f_pow)
+
+
 
   write_array("Iffs",Iffs)
   write_array("obs",obs)

@@ -88,6 +88,7 @@ Node *copy_par_node(Node *tree);
 Node *copy_par_fun_node(Node *tree);
 Node *copy_non_leaf(Node *tree);
 Node *copy_node(Node *tree);
+Node *copy_node_nojump(Node *tree);
 Node *make_run_node(Node *tree);
 
 // compare functions

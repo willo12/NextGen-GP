@@ -12,13 +12,15 @@
 
 //#define CUSTOM_NODES
 #define TS_FACTOR 2
-#define FORCING_TERMS 1
+#define FORCING_TERMS 0
 #define PARSIMONY 0.0 // to calculate effect of tree size on score
 #define DOUBLETRUNC 10000
 #define MAXTREESTR 10000  // max size tree string
 #define OPTABLE 200 // size optable
 #define MAXPAR 40 // max number of registers
 #define STACKSIZE 2000
+
+#define MAXHEIGHT 7
 
 #define RESTRICTED_PARS 0
 
@@ -30,7 +32,7 @@
 //#define INTSTATES
 //#define MACHINE_FUNCTIONS
 
-#define DEBUG
+//#define DEBUG
 
 //#define SUPERLEAF
 

@@ -2870,7 +2870,7 @@ void c_nextgen(int my_number,int qsubs,int runlen,int popsize, int compgridsize,
  
  //     fprintf(stderr,"size=%d    \n",size);  
 
-      if ( (size > -1) && (size < MAXSIZE) )
+      if ( (tree_height(newns.node,0) < MAXHEIGHT ) && (size > -1) && (size < MAXSIZE) )
       {  
     /* perform optimization here */    
 
