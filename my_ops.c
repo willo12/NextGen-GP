@@ -25,6 +25,7 @@ double (*op_table[OPTABLE])(Node *tree);
 #endif
 
 char* (*code2str_table[OPTABLE])(Node *tree, char trstr[]);
+char* (*code2c_str_table[OPTABLE])(Node *tree, char trstr[]);
 
 Node* (*copy_table[OPTABLE])(Node *tree);
 Node* (*str2leaf_table[OPTABLE])(char text[], char left_bracket, char delim);
@@ -594,6 +595,24 @@ int init_io_tables(int arg_table[])
 
   code2str_table[((int) par_op_char)] = &parChr;  
   code2str_table['H'] = &parfunChr;  
+
+/* initialize c string table */
+
+  for (i=0;i<OPTABLE;i++)
+  {
+    code2c_str_table[i] = &nFunChr_c;
+  };
+
+  /* these are the true leaf nodes for printing purposes, not V (V is leaf during execution) */
+#ifdef INTCONSTS
+  code2c_str_table[((int) const_op_char)] = &constChrInt;  
+#else
+  code2c_str_table[((int) const_op_char)] = &constChr;  
+#endif
+
+  code2c_str_table[((int) par_op_char)] = &parChr_c;  
+  code2c_str_table['H'] = &parfunChr;  
+
 
   return 0;
 }

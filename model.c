@@ -44,6 +44,7 @@ char const_op_char = 'C';
 char par_op_char = 'P';
 
 int numpar;
+char treebuffer[TREEBUFFER];
 
 // SPECIFIC TO ops_muldim!! CHANGE LATER
 //double buffers[STACKSIZE][SPACEDIM];
@@ -302,9 +303,7 @@ Experiment RK4(Node *tree, State S_i, Experiment Exp)
 /*  double S_init=0.3; 
   double S_init=0.345;
 */
-
 //  State S_return = init_state(SPACEDIM, NULL);
-
 /* Runge Kutta k's */
 
   State k1 = init_state(SPACEDIM, NULL);
@@ -313,7 +312,7 @@ Experiment RK4(Node *tree, State S_i, Experiment Exp)
   State k4 = init_state(SPACEDIM, NULL);
 
   State S = Exp.S; // shorthand
-  State S_arg = init_state(SPACEDIM, NULL);
+  State S_arg = init_state(SPACEDIM, NULL); // argument to update_regs in intermediate steps
   State S_dot_dt = init_state(SPACEDIM, NULL);
 
 /*  S[0]=S_init; */
@@ -431,6 +430,70 @@ Experiment RK4(Node *tree, State S_i, Experiment Exp)
  
   return Exp;
 }
+
+
+Experiment euler(Node *tree, State S_i, Experiment Exp)
+{
+// RESULT IS ON FORCING TIME STEP
+
+  int m = Exp.Iffs.dims.rows;
+  int n = Exp.Iffs.dims.cols;
+
+  double dt;
+
+  int i;
+  int i_rel;
+  double dt_forc;
+  int steps_forc=0;
+
+  State k1 = init_state(SPACEDIM, NULL);
+  State S = init_state(SPACEDIM, NULL);
+  State S_dot_dt = init_state(SPACEDIM, NULL);
+
+  copy_state(S_i, S); // copy initial conditions (from arg) to state
+
+  dt_forc = Exp.Iffs.data[n]-Exp.Iffs.data[0]; /* time step for forcing */
+  dt=dt_forc/TS_FACTOR; /* time step for integration loop. Typically dt_forc = 2*dt */
+
+  while (steps_forc<m) 
+  {
+    for (i=0;i<SPACEDIM;i++)
+    {
+      *(Exp.result.data+(steps_forc*SPACEDIM)+i ) = S.data[i]; 
+    }
+
+    for (i_rel=0;i_rel<TS_FACTOR;i_rel++)
+    {
+      update_regs(S, n, steps_forc, Exp.Iffs.data);
+      evaluate_tree(tree, k1);
+
+      for (i=0;i<SPACEDIM;i++)
+      {
+        S.data[i] += k1.data[i]*dt;
+      }
+
+  /* degeneracy checks */
+      for (i=0;i<SPACEDIM;i++)
+      {
+        if ( (fabs(S.data[i])>BLOWUP) || isnan(S.data[i])  )
+        {
+          i = SPACEDIM;
+          free_state(k1);
+
+          *Exp.result.data=1e19;
+          return Exp;
+        }
+      }
+    }
+    steps_forc++;
+  };
+
+  free_state(k1);
+  free_state(S_dot_dt);
+ 
+  return Exp;
+}
+
 
 
 
@@ -558,9 +621,7 @@ double score_fun_basic(Experiment Exp)
     error += tmp_error0*tmp_error0;
 # endif
 
- 
   }
-
 
 #else
   int k; // k to cycle through obs columns.
@@ -570,9 +631,6 @@ double score_fun_basic(Experiment Exp)
     {      
       tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+k] - Exp.result.data[Exp.I.data[j]*SPACEDIM+k];
       error += tmp_error0*tmp_error0;
-
- //     fprintf(stderr,"(%d, %g) ", k,error);  
-
     }
   }
 
@@ -582,22 +640,151 @@ double score_fun_basic(Experiment Exp)
 }
 
 
-Population score_pop(Population pop_old,Population pop, Experiment Exp, int compgridsize)
+
+
+
+
+int make_itg(Node *tree, char trstr[])
+{ // make c code integration function
+  int i;
+  Node * child;
+  char tmp_str[MAXTREESTR];
+  char tmp_str2[MAXTREESTR];
+
+  strcpy(trstr,"");
+
+  for (i=0;i<SPACEDIM;i++)
+  {
+    child = ((Node *) tree->children[i]);
+    (*code2c_str_table[(int) child->op])(child,tmp_str);
+    sprintf(tmp_str2,"S.data[%d]+=%s*dt;\n",i,tmp_str);
+    strcat(trstr, tmp_str2); 
+  }
+
+//  fprintf(stderr,"made itg: %s\n",trstr);
+  return 0;
+}
+
+void make_ic(NodeScore ns, char trstr[])
+{
+
+//  S.data[0] = -0.4614;
+//  S.data[1] = 0.378;
+  int i;
+  char tmp_str[MAXTREESTR];
+
+  strcpy(trstr,"");  
+
+  for (i=0;i<SPACEDIM;i++)
+  {
+    sprintf(tmp_str,"S.data[%d]=%g;\n",i, ns.S_i.data[i]);  
+    strcat(trstr, tmp_str); 
+  }
+}
+
+int make_itg_fun(NodeScore ns, char template[], char total_str[])
+{
+
+  char filename[30];
+  char tmp_str[MAXTREESTR];
+  char calc_str[MAXTREESTR];
+  char ic_str[MAXTREESTR];
+ 
+  sprintf(filename,"templates/itg.c");
+  read_text(filename, template);
+ 
+  make_ic(ns,ic_str); // obtain initial conditions statements S[i] = something;
+//  fprintf(stderr,"ic:\n%s\n",tmp_str); 
+
+  make_itg(ns.node,calc_str); // obtain calculations inside integration loop
+//  fprintf(stderr,"itg:\n%s\n",tmp_str); 
+
+  sprintf(total_str,template,ic_str,calc_str);
+
+  return 0;
+}
+
+Population pop2c(Population pop)
+{
+
+  int i;
+
+  char filename[30];
+  char file_out[30];
+
+  char tmp_str[MAXTREESTR];
+
+  char template[MAXTEMPLATESIZE];
+  char tmp_str_long[MAXTEMPLATESIZE];
+
+  treebuffer[0] = '\0';
+
+  sprintf(filename,"templates/euler1.c");
+  read_text(filename, template);
+  sprintf(tmp_str_long,template,pop.popsize);
+
+  strcat(treebuffer, tmp_str_long);
+  
+  sprintf(filename,"templates/itg.c");
+
+  read_text(filename, template);
+  for (i=0;i<pop.popsize;i++) /* fill pop_next. i is only incremented once new_ns.node is succesfully added, not discarded.  */
+  {
+    make_itg_fun(pop.pop[i], template, tmp_str_long);
+    strcat(treebuffer, tmp_str_long);
+  }
+ 
+  sprintf(filename,"templates/euler2.c");
+  read_text(filename, template);
+  strcat(treebuffer, template);
+
+  sprintf(file_out,"test_euler.c");
+  store_data(file_out,treebuffer,"w");
+
+}
+
+Population score_pop(Population pop_old,Population pop, Experiment Exp, int compgridsize, int check_exist)
 {
 #ifndef INLINESCORING
   int i, i_tree_old, leafcount;
-  int *current = make_int(0);
   double error;
 
   Point my_loc; // to be used in internal grid
 
+# ifdef COMPILE
+  char buff[512];
+  pop2c(pop);
+  int status = system("clang -o  test_euler  states.c fields.c test_euler.c -I include -lm -O0");
 
+  FILE *in=popen("./test_euler","r");
+
+  i=0;
+  while((fgets(buff, sizeof(buff), in)!=NULL) && (i<pop.popsize)  )
+  {
+    error = atof(buff);
+
+    pop.pop[i].score = error;
+    i++;
+
+    pop.toterror += error;
+    if (error < pop.minerror)
+    {
+      pop.minerror = error;
+      pop.i_min = i; // keep track of best score
+    }
+  }
+  pclose(in);
+
+# else
+  int *current = make_int(0);
   for (i=0;i<pop.popsize;i++) /* fill pop_next. i is only incremented once new_ns.node is succesfully added, not discarded.  */
   {
-    my_loc = i2point(i, pop.max_loc.x);
-
-    i_tree_old = does_tree_exist(pop.pop[i],pop_old, my_loc, compgridsize);
-    if (i_tree_old > -1)
+    if (check_exist == 1)
+    {
+      my_loc = i2point(i, pop.max_loc.x);
+      i_tree_old = does_tree_exist(pop.pop[i],pop_old, my_loc, compgridsize);
+    }
+    if ( (1 == 0) && (check_exist == 1) && (i_tree_old > -1) )
     {
       error = pop_old.pop[i_tree_old].score;
       pop.trees_reused++;            
@@ -605,11 +792,11 @@ Population score_pop(Population pop_old,Population pop, Experiment Exp, int comp
     }
     else
     {
- #ifdef EVOLVEIC
+#  ifdef EVOLVEIC
       error = get_score(pop.pop[i].node, pop.pop[i].S_i, Exp);
- #else
+#  else
       error = get_score(pop.pop[i].node, Exp.S_i, Exp);
- #endif
+#  endif
       leafcount = conparcount(pop.pop[i].node, current);
       *current = 0;
 
@@ -625,11 +812,10 @@ Population score_pop(Population pop_old,Population pop, Experiment Exp, int comp
       pop.i_min = i; // keep track of best score
     }
   }
-
   free(current);
+# endif
 
 #endif
-
   return pop;
 }
 
@@ -652,7 +838,13 @@ double get_score(Node *newtree, State S_i, Experiment Exp)
   RK4(runtree,S_i, Exp);
   free_node(runtree);
 #else
+
+# ifdef RK4
   RK4(newtree,S_i, Exp);
+# else
+  euler(newtree,S_i, Exp);
+# endif
+
 #endif
 
 
@@ -766,12 +958,10 @@ void c_single_tree(char treestr[], int ts_factor, double * S_init_array)
   State S_i;
 
   srand( getpid()+time(NULL)  );
-
   Experiment Exp = make_experiment(ts_factor);
 
   init_tables();
   init_reg(Exp);
-
 
   if (abs(*S_init_array) > 5.0 )
   {
@@ -792,7 +982,6 @@ void c_single_tree(char treestr[], int ts_factor, double * S_init_array)
     exit(-1);
   }
 
-
   newtree = str2node(tmp_str,'(',',');
   
   for (i=0;i<SPACEDIM;i++)
@@ -810,6 +999,8 @@ void c_single_tree(char treestr[], int ts_factor, double * S_init_array)
 
   write_array(score_field, score_file);
   write_array(Exp.result, result_file);
+
+  free_experiment(Exp);
 
 /*  printf("tree score: %g with S_init: %g, numpar: %d \n", error,S_init, numpar);
 */

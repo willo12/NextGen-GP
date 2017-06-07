@@ -42,9 +42,8 @@ typedef struct node_score {
   IntPars ip;
 #endif
 
-
-
 } NodeScore;
+
 
 typedef struct population {
   // general

@@ -4,7 +4,6 @@
 
 //#define INTCONSTS
 #define STEM_NODES
-#define SPACEDIM 2   // spatial dimension of dynamical system
 
 //#define MAXINT 20
 
@@ -36,13 +35,15 @@ typedef struct experiment {
 
 
 int model_init(Experiment Exp);
-
+int make_itg(Node *tree, char trstr[]);
+void make_ic(NodeScore ns, char trstr[]);
+int make_itg_fun(NodeScore ns, char template[], char total_str[]);
 int free_experiment(Experiment E);
 IntPars makerandomint_pars(Experiment Exp);
 IntPars mut_int_pars(IntPars ip, Experiment Exp);
 State handle_S_init(double S_init, Experiment Exp);
 void c_map_f(char *treestring, double *A, double *B, int shape_i, int shape_j, double S0_start, double S1_start, double S0_end, double S1_end, double *forcing, int forcing_dim);
-Population score_pop(Population pop_old,Population pop, Experiment Exp, int compgridsize);
+Population score_pop(Population pop_old,Population pop, Experiment Exp, int compgridsize, int check_exist);
 double get_score(Node *newtree, State S_i, Experiment Exp);
 
 Experiment make_experiment(int ts_factor);

@@ -472,6 +472,80 @@ int make_test_tree_double(char test_tree_str[])
   return 0;
 }
 
+int make_test_itg(char test_tree_str[])
+{
+
+  char filename[30];
+  char tmp_str[MAXTREESTR];
+  char calc_str[MAXTREESTR];
+  char ic_str[MAXTREESTR];
+
+  char io_str[MAXTEMPLATESIZE];
+  char total_str[MAXTEMPLATESIZE];
+
+  Node *player;
+
+  NodeScore ns;
+  double ic_array[] = {-0.4614,0.378};
+
+  int i; 
+
+  ns.S_i = init_state(SPACEDIM, ic_array);
+
+  State S_result = make_state(SPACEDIM);
+
+  sprintf(filename,"templates/itg.c");
+  read_text(filename, io_str);
+
+  sprintf(tmp_str, "%s",test_tree_str  );  
+  player = str2node(tmp_str,'(',',');
+  ns.node = player;
+
+  make_itg_fun(ns, io_str, total_str);
+
+  fprintf(stderr,"yowww %s\n",total_str);
+
+
+  free_node_score(ns);
+  return 0;
+}
+
+
+int make_test_tree_c_double(char test_tree_str[])
+{
+  char tmp_str[MAXTREESTR];
+  Node *player;
+  Node *  child;
+  int i; 
+
+  State S_result = make_state(SPACEDIM);
+
+  sprintf(tmp_str, "%s",test_tree_str  );  
+  player = str2node(tmp_str,'(',',');
+
+  if (player->op == 'V')
+  { 
+    child = ((Node *) player->children[0]);
+    (*code2c_str_table[(int) child->op])(child,tmp_str);
+    fprintf(stderr,"child 0 after conversion: %s\n",tmp_str); 
+
+    child = ((Node *) player->children[1]);
+    (*code2c_str_table[(int) child->op])(child,tmp_str);
+    fprintf(stderr,"child 1 after conversion: %s\n",tmp_str); 
+    
+  }
+  else
+  {
+    (*code2c_str_table[(int) player->op])(player,tmp_str);
+    fprintf(stderr,"tree after conversion: %s\n",tmp_str); 
+  }
+
+
+  free_node(player);
+  return 0;
+}
+
+
 
 
 int make_test_tree(char test_tree_str[])
@@ -513,8 +587,11 @@ int test_tree_io(void)
 
 #ifdef STEM_NODES
 
-  make_test_tree_double("(((5.1,(5.5,5.5)S)A,(3,3)S)S,3.2)V"  ); 
+//  make_test_tree_double("(((5.1,(5.5,5.5)S)A,(3,3)S)S,3.2)V"  ); 
 
+//  make_test_tree_c_double("((8.23e-05,(((p2,(p2,0.009076)A)A,p1)S,((((p2)T,p1)S,((p2)T,(p2)T)A)M,(((p2,p1)S,p2)M,p0)M)S)A)M,(3.691e-05,(((((p0,0.03891)S,p1)S,((p0,0.04903)S,(p1,p1)M)M)S)T,(((p0,p1)A,((p0,p1)A,0.4125)M)A)T)A)M)V"  ); 
+
+  make_test_itg("((8.23e-05,(((p2,(p2,0.009076)A)A,p1)S,((((p2)T,p1)S,((p2)T,(p2)T)A)M,(((p2,p1)S,p2)M,p0)M)S)A)M,(3.691e-05,(((((p0,0.03891)S,p1)S,((p0,0.04903)S,(p1,p1)M)M)S)T,(((p0,p1)A,((p0,p1)A,0.4125)M)A)T)A)M)V");
 
 #ifdef INTSTATES
 
@@ -550,6 +627,7 @@ char* node2str(Node *tree, char trstr[])
 */
   return (*code2str_table[tree->op])(tree,trstr);
 };
+
 
 /* Random selection utilities */
 
@@ -1508,6 +1586,25 @@ int NodeScore2bufferline(NodeScore ns, char treebuffer[] )
 }
 
 
+int NodeScore2c_string(NodeScore ns, char treebuffer[] )
+{
+  /* add string containing score and tree in bracket notation to treebuffer string */
+
+  char tmp_str[MAXTREESTR];
+  const char hor_delim[2] = " ";
+
+
+
+  /* add tree */
+  (*code2c_str_table[(int) ns.node->op])(ns.node,tmp_str); /* convert tree to string */
+  strcat(treebuffer,  tmp_str );  // add string to treebuffer string
+  strcat(treebuffer,  "\n"  );  // add \n
+
+  return 0;
+}
+
+
+
 int migrants2buffer(Population pop, int i_iofile , int migrants ,int compgridsize, Experiment Exp, Point my_loc_external )
 {
 /* creates output file with spatially ordered list of trees, depending on the direction of the output file.
@@ -2010,6 +2107,46 @@ int read_data(const char *filepath,Node *trees[],int maxtrees)
 
 
 
+int read_text(char *filepath,char *dest_str )
+{
+
+  int i;
+ 
+//  char tmp_str[MAXTEMPLATESIZE];
+
+  i=0; // counter
+
+  FILE *fp;
+
+  fp = fopen(filepath,"r");  // file pointer fp
+
+  if(fp == NULL) 
+  {
+    fprintf(stderr,"Error in opening file %s\n",filepath);
+    return(-1);
+  }
+  while (i<MAXTEMPLATESIZE)
+  {
+    char c = fgetc(fp);
+    if( feof(fp) )
+    {
+      dest_str[i] = '\0';
+      break ;
+    }
+    dest_str[i] = c;
+
+    i++;
+  };
+
+  fclose(fp);
+
+//  strcpy(dest_str, tmp_str);
+  return(0);
+
+  return(-2); /* can't open file. */
+}
+
+
 
 int read_pop(char *filepath,Population pop)
 {
@@ -2029,17 +2166,14 @@ int read_pop(char *filepath,Population pop)
     while((fgets (tmp_str,MAXTREESTR,fp)!=NULL ) && (i<pop.popsize)  )  // read line by line from file
     {
       ns = bufferline2NodeScore(tmp_str,filepath); // convert to NodeScore, file arg only for error reporting 
-
       if (check_node(ns.node) == 1) /* tree integrity check after translation to node */
       {
         i = -1;
         break;
       }
-
       pop.pop[i] = ns;
       i++;
     }
-
     fclose(fp);
  
     if (i<pop.popsize)
@@ -2047,10 +2181,8 @@ int read_pop(char *filepath,Population pop)
       fprintf(stderr,"Not enough lines in %s. \n",filepath);
       return -1;
     }
-
     return i;
   }
-  
   return(-2); /* can't open file. */
 }
 
@@ -2543,6 +2675,8 @@ void random_init(Population pop,  Experiment Exp)
 
   NodeScore newns;
 
+#ifdef INLINESCORING
+
   while (i<pop.popsize)
   {        
     node_count = 0;  /* node_count is a global var */
@@ -2550,10 +2684,6 @@ void random_init(Population pop,  Experiment Exp)
 
     if (node_count > INITNODES)
     {
-      /* score calculation for random init */
- //     fprintf(stderr,"(%g , %g) ", newns.S_i[0], newns.S_i[1]);
-
-
       user_functions(newns);
 
 #ifdef EVOLVEIC
@@ -2561,13 +2691,10 @@ void random_init(Population pop,  Experiment Exp)
 #else 
       error = get_score(newns.node, Exp.S_i, Exp); 
 #endif
-
       if (error <1e18) 
       {
         newns.score = error;
-
         pop.pop[i] = newns;
-       
         i++;
       }
       else
@@ -2580,9 +2707,30 @@ void random_init(Population pop,  Experiment Exp)
       free_node_score(newns);
     }
   }
+
+#else
+  while (i<pop.popsize)
+  {   // generate population in pop     
+    node_count = 0;  // node_count is a global var 
+    newns = makerandomns(MAXDEPTH,FPR,PPR, Exp);
+
+    if (node_count > INITNODES)
+    {
+      user_functions(newns);
+
+      newns.score = 1e19;
+      pop.pop[i] = newns;
+      i++;
+    }
+    else
+    {
+      free_node_score(newns);
+    }
+  }
+
+  pop = score_pop(pop, pop, Exp, 0,0);  
+#endif
 }
-
-
 
 Population copy_pop(Population pop, Population pop_next)
 { /* copy pop_next into pop and free previous NodeScore elements of pop.pop */
@@ -2836,6 +2984,8 @@ void c_nextgen(int my_number,int qsubs,int runlen,int popsize, int compgridsize,
 
         newns = allmut(tmpns3, mutationrate, Exp);  // mutate. this also creates a new tree
 
+        free_node_score(tmpns3);
+
 //    newns = copy_node_score(tmpns1);  // TESTING
 
 #ifdef DEBUG
@@ -2857,7 +3007,6 @@ void c_nextgen(int my_number,int qsubs,int runlen,int popsize, int compgridsize,
         } 
 #endif
 
-        free_node_score(tmpns3);
       }
       else
       {
@@ -2951,7 +3100,7 @@ void c_nextgen(int my_number,int qsubs,int runlen,int popsize, int compgridsize,
 #ifndef INLINESCORING
 // score all the new trees
 
-    pop_next = score_pop(pop, pop_next, Exp, compgridsize);
+    pop_next = score_pop(pop, pop_next, Exp, compgridsize,1);
 
 #endif
 

@@ -223,6 +223,114 @@ char* nFunChr(Node *tree, char trstr[])
 
 };
 
+char* parChr_c(Node *tree, char trstr[])
+{
+/* convert tree to str where tree is a par leaf */
+
+  sprintf(trstr,"p%d",*((int *) tree->children[0]));
+
+
+  int i = *((int *) tree->children[0]);
+
+  if (i<SPACEDIM)
+  {
+    sprintf(trstr,"S.data[%d]",i);    
+  }
+  else
+  {
+    sprintf(trstr,"Exp.Iffs.data[steps_forc*(FORCING_TERMS+1)+1+%d]",i);    
+  }
+
+  return trstr; 
+};
+
+
+char* nFunChr_c(Node *tree, char trstr[])
+{
+/* convert tree to str recursively, where root node is an op that takes n arguments */
+ 
+  double tmp_double;
+  int i, n, op, child_op;
+  char tmp_str[MAXTREESTR];
+  Node * child;
+
+  op = ((int) ((Node *) tree)->op);
+  n = arg_table[op];
+
+  if ( ((Node *) tree)->op == 'T' )
+  {
+    strcpy(trstr,"rth(");
+
+    child = ((Node *) tree->children[0]);
+    child_op = ((int) child->op);
+    (*code2c_str_table[child_op])(child, tmp_str );
+    strcat(trstr,tmp_str);
+    sprintf(tmp_str,")" );
+    strcat(trstr, tmp_str);
+  }
+  else
+  {
+    strcpy(trstr,"(");
+ 
+    child = ((Node *) tree->children[0]);
+    child_op = ((int) child->op);
+    (*code2c_str_table[child_op])(child, tmp_str );
+    strcat(trstr,tmp_str);
+
+    child = ((Node *) tree->children[1]);
+    child_op = ((int) child->op);
+
+    if ( ((Node *) tree)->op == 'A' )
+    {
+      strcat(trstr,"+");
+      (*code2c_str_table[child_op])(child, tmp_str );
+    }
+    else if ( ((Node *) tree)->op == 'S' )
+    {
+      if (child_op == const_op_char)
+      {
+
+        tmp_double = *((double *) child->children[0]);
+ //       fprintf(stderr,"yo %g",tmp_double);
+
+        if (tmp_double<0)        
+        {
+          strcat(trstr,"+");
+          sprintf(tmp_str,"%0.8g",-tmp_double);
+        }
+        else if (tmp_double>0)
+        {
+          strcat(trstr,"-");
+          sprintf(tmp_str,"%0.8g",tmp_double);
+        }
+        else
+        {
+          strcat(trstr,"+");
+          sprintf(tmp_str,"%0.8g",0.0);
+        }
+
+      }
+      else
+      { 
+        strcat(trstr,"-");
+        (*code2c_str_table[child_op])(child, tmp_str );
+      }
+    }
+    else if ( ((Node *) tree)->op == 'M' )
+    {
+      strcat(trstr,"*");
+      (*code2c_str_table[child_op])(child, tmp_str );
+    }
+
+    strcat(trstr,tmp_str);
+
+    sprintf(tmp_str,")" );
+    strcat(trstr, tmp_str);
+  }
+
+  return trstr;
+
+};
 
 
 

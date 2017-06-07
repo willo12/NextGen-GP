@@ -16,6 +16,9 @@ char* parChr(Node *tree, char trstr[]);
 char* parfunChr(Node *tree, char trstr[]);
 char* nFunChr(Node *tree, char trstr[]);
 
+char* parChr_c(Node *tree, char trstr[]);
+char* nFunChr_c(Node *tree, char trstr[]);
+
 char* zeroFunChrSL(Node *tree, char trstr[]);
 char* oneFunChrSL(Node *tree, char trstr[]);
 char* twoFunChrSL(Node *tree, char trstr[]);

@@ -26,6 +26,8 @@ Point i2point(int i, int max_x);
 int *make_int(int value);
 double *make_double(double value);
 
+int NodeScore2c_string(NodeScore ns, char treebuffer[] );
+int read_text(char *filepath,char *dest_str );
 int free_int_pars(IntPars ip);
 int free_node_score(NodeScore ns);
 int free_pop(Population pop);

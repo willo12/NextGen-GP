@@ -9,6 +9,7 @@ extern double (*op_table[OPTABLE])(Node *tree);
 #endif
 
 
+extern char* (*code2c_str_table[OPTABLE])(Node *tree, char trstr[]);
 extern char* (*code2str_table[OPTABLE])(Node *tree, char trstr[]);
 
 extern Node* (*copy_table[OPTABLE])(Node *tree);
