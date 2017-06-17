@@ -5,12 +5,15 @@
 #define SPACEDIM 2   // spatial dimension of dynamical system
 #define COMPARTMENTS 4
 
-//#define RK4
+//#define I_START_POLY 1
+//#define DOUBLEPARS
+#define SCALARPARS 0
+
+#define USE_RK4
 #define TANH_ONCE
-#define INTPARS 0
 #define OBSCOLS 1
 #define EVOLVEIC
-#define OBSERROR
+//#define OBSERROR
 //#define COMPILE
 
 //#define CUSTOM_NODES
@@ -25,6 +28,7 @@
 #define STACKSIZE 2000
 
 #define MAXHEIGHT 8
+#define MAXHEIGHT2 4
 
 #define RESTRICTED_PARS 0
 

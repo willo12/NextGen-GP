@@ -169,7 +169,7 @@ def get_forcing(forcing_dir=os.environ['HOME'] + '/PROJECTS/paper_glac/',forcing
 
 
 
-def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/paper_glac/raymo_d18_trunc.txt',obs_error=2,detrend=False,cols=[5,], home = os.environ['HOME'], t_start = -int(2.5e6),forcing_substeps=2, random_comp = 0.0):
+def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/paper_glac/raymo_d18_trunc.txt',obs_error=0,detrend=False,cols=[5,], home = os.environ['HOME'], t_start = -int(2.5e6),forcing_substeps=2, random_comp = 0.0):
   """
   Example: obs_file = 'PROJECTS/paper_glac/epica_T.txt__mul__-1' multiplies series by -1
   """
@@ -236,8 +236,6 @@ def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/pape
 
     obs[:,1] = new_obs_low
     obs[:,2] = new_obs_high
-
-
 
   else:
     for i in range(1,obs.shape[1]):

@@ -131,7 +131,7 @@ def find_initial_conditions(tree_str, dtype=float):
 
     return (tree, np.array( [dtype(e) for e in  IC_string.strip("()").split(",") ] ) )
   else:
-    return (tree, None )
+    return (tree_str, None )
     
 
 

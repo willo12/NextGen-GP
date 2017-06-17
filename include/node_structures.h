@@ -38,8 +38,8 @@ typedef struct node_score {
   State S_i;
 #endif
 
-#if INTPARS > 0
-  IntPars ip;
+#if SCALARPARS > 0
+  ScalarPars ip;
 #endif
 
 } NodeScore;

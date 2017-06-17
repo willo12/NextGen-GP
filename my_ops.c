@@ -402,7 +402,7 @@ void user_functions(NodeScore ns)
 {
 
 
-#if INTPARS > 0
+#if (SCALARPARS > 0) && !defined DOUBLEPARS 
   force_params_node(ns.node, *ns.ip.data);
 #endif
 
@@ -618,8 +618,54 @@ int init_io_tables(int arg_table[])
 }
 
 
+
+
+void evaluate_poly(NodeScore ns, State S_return)
+{
+#if (SCALARPARS > 0) && defined(DOUBLEPARS) 
+  int i;
+
+  for (i=SPACEDIM-I_START_POLY;i<SPACEDIM;i++)
+  {
+    S_return.data[i] = ns.ip.data[0] + ns.ip.data[1]*reg[0] + ns.ip.data[2]*reg[1];
+  }
+#endif
+}
+
+void evaluate_ns(NodeScore ns, State S_return)
+{ /* evaluates three and deposits result in S_return.data */
+
+Node *tree = ns.node;
+
+#if defined(STEM_NODES)
+  Node *child;
+  int i;
+
+  // only evaluate the children of the stem node
+#if (SCALARPARS > 0) && defined(DOUBLEPARS)
+  for (i=0;i<SPACEDIM-1;i++)
+#else
+  for (i=0;i<SPACEDIM;i++)
+#endif
+  { 
+    child =  ((Node *) ( (Node *) tree->children[i]));
+    S_return.data[i] = (*op_table[( (int)  (  (Node *) child)->op)])(((Node *) child));
+  }
+
+# if (SCALARPARS > 0) && defined(DOUBLEPARS) 
+  S_return.data[i] = ns.ip.data[0] + ns.ip.data[1]*reg[0] + ns.ip.data[1]*reg[1];
+# endif
+
+#else
+  S_return.data[0] = (*op_table[( (int)  (  (Node *) tree)->op)])(((Node *) tree)); 
+#endif
+
+  return;
+}
+
 void evaluate_tree(Node *tree, State S_return)
 { /* evaluates three and deposits result in S_return.data */
+
 
 #if defined(STEM_NODES)
   Node *child;

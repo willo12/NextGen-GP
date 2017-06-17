@@ -250,12 +250,9 @@ char* nFunChr_c(Node *tree, char trstr[])
 /* convert tree to str recursively, where root node is an op that takes n arguments */
  
   double tmp_double;
-  int i, n, op, child_op;
+  int child_op;
   char tmp_str[MAXTREESTR];
   Node * child;
-
-  op = ((int) ((Node *) tree)->op);
-  n = arg_table[op];
 
   if ( ((Node *) tree)->op == 'T' )
   {

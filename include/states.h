@@ -16,11 +16,15 @@ typedef struct state {
 
 } State;
 
-typedef struct int_pars {
+typedef struct scalar_pars {
 
+#ifdef DOUBLEPARS
+  double* data;
+#else
   int* data;
+#endif
 
-} IntPars;
+} ScalarPars;
 
 
 int free_state(State S);

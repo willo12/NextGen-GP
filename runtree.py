@@ -81,13 +81,11 @@ if __name__ == "__main__":
   fig_name = '.'.join([fig_name, fig_type])
   out_path = os.path.join(HOME,'Dropbox','paper_algo',fig_name) 
 
-  popsize = 1
-
+# run tree
   config = load_config()
-
   (tree, S_init_array) = find_initial_conditions(tree)    
-
   Iffs,result,obs_other,I, tree,ts_factor,startscore_i, S_init, otime, scores = single_run(tree=tree,config = config, S_init_array = S_init_array)
+# end run tree
 
   otime = otime*1e-3
 

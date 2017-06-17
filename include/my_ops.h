@@ -30,7 +30,8 @@ int init_tables_ops(void);
 int init_tables_copy(void);
 int init_io_tables(int arg_table[]);
 
-void evaluate_tree(Node *tree, State S_return);
+void evaluate_ns(NodeScore ns, State S_return);
+void evaluate_tree(Node* tree, State S_return);
 double run_node(Node* node);
 
 #endif

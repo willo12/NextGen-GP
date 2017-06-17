@@ -415,6 +415,11 @@ def stability_test(tree,config=None,ts_factor=[2,8], S_init_array = None):
   return stab_scores
 
 def single_run(tree,config=None,ts_factor=None, S_init_array=None):
+  """
+  Run one tree
+
+  Calls nextgen.single_tree
+  """
 
   result_file = 'result'
   score_file = 'score_val'

@@ -91,8 +91,8 @@ Node *pick_F(Node *t, int max_i);
 int export_internal(Population pop, Point my_loc, Point dest_loc, int tour, int compgridsize, int migrants);
 int internal_migration(Population pop, int tour, int compgridsize, int migrants);
 Point get_boundary(int i_iofile, int i, Point max_loc, int migrants);
-IntPars str2int_pars(char * text);
-int int_pars2bufferline(NodeScore ns, char treebuffer[], IntPars ip );
+ScalarPars str2scalar_pars(char * text);
+int scalar_pars2bufferline(NodeScore ns, char treebuffer[], ScalarPars ip );
 int NodeScore2bufferline(NodeScore ns, char treebuffer[] );
 int migrants2buffer(Population pop, int i_iofile , int migrants ,int compgridsize, Experiment Exp, Point my_loc_external );
 int numbers_dot_only(const char *s);
@@ -290,7 +290,7 @@ double *make_double(double value)
 
 
 
-int free_int_pars(IntPars ip)
+int free_scalar_pars(ScalarPars ip)
 {
   free(ip.data);
   ip.data = NULL;
@@ -306,8 +306,8 @@ int free_node_score(NodeScore ns)
   free_state(ns.S_i);
 #endif
 
-#if INTPARS > 0
-  free_int_pars(ns.ip);
+#if SCALARPARS > 0
+  free_scalar_pars(ns.ip);
 #endif
 
   return 0;
@@ -332,11 +332,15 @@ int free_pop(Population pop)
 
 
 
-IntPars make_int_pars(int size)
+ScalarPars make_scalar_pars(int size)
 {
-  IntPars ip;
+  ScalarPars ip;
 
+#ifdef DOUBLEPARS
+  ip.data = (double *)malloc(sizeof(double)*size);
+#else
   ip.data = (int *)malloc(sizeof(int)*size);
+#endif
 
   return ip;
 }
@@ -358,8 +362,8 @@ NodeScore make_node_score(int size)
   ns.S_i = make_state(size);
 #endif
 
-#if INTPARS > 0
-  ns.ip = make_int_pars(INTPARS);
+#if SCALARPARS > 0
+  ns.ip = make_scalar_pars(SCALARPARS);
 #endif 
 
   return ns;
@@ -377,8 +381,8 @@ NodeScore copy_node_score(NodeScore ns)
   new_ns.S_i = make_state(ns.S_i.size);
 #endif
 
-#if INTPARS > 0
-  new_ns.ip = make_int_pars(INTPARS);
+#if SCALARPARS > 0
+  new_ns.ip = make_scalar_pars(SCALARPARS);
 #endif 
 
   return new_ns;
@@ -439,6 +443,17 @@ Node *talloc(void)
   return newtree;
 };
 
+
+NodeScore tree_in_nodescore(Node *node)
+{
+  NodeScore ns;
+  ns.S_i = make_state(SPACEDIM);
+  ns.node = node;
+
+  return ns;
+}
+
+
 int make_test_tree_double(char test_tree_str[])
 {
   char tmp_str[MAXTREESTR];
@@ -468,6 +483,12 @@ int make_test_tree_double(char test_tree_str[])
 
   fprintf(stderr,"\n");
 
+  NodeScore ns = tree_in_nodescore(player);
+  for (i=0;i<SPACEDIM;i++)
+  {
+    ns.S_i.data[i] = 0.0;
+  }
+
   free_node(player);
   return 0;
 }
@@ -477,9 +498,7 @@ int make_test_itg(char test_tree_str[])
 
   char filename[30];
   char tmp_str[MAXTREESTR];
-  char calc_str[MAXTREESTR];
-  char ic_str[MAXTREESTR];
-
+ 
   char io_str[MAXTEMPLATESIZE];
   char total_str[MAXTEMPLATESIZE];
 
@@ -487,13 +506,7 @@ int make_test_itg(char test_tree_str[])
 
   NodeScore ns;
   double ic_array[] = {-0.4614,0.378};
-
-  int i; 
-
   ns.S_i = init_state(SPACEDIM, ic_array);
-
-  State S_result = make_state(SPACEDIM);
-
   sprintf(filename,"templates/itg.c");
   read_text(filename, io_str);
 
@@ -503,7 +516,7 @@ int make_test_itg(char test_tree_str[])
 
   make_itg_fun(ns, io_str, total_str);
 
-  fprintf(stderr,"yowww %s\n",total_str);
+  fprintf(stderr,"make test itg %s\n",total_str);
 
 
   free_node_score(ns);
@@ -516,9 +529,6 @@ int make_test_tree_c_double(char test_tree_str[])
   char tmp_str[MAXTREESTR];
   Node *player;
   Node *  child;
-  int i; 
-
-  State S_result = make_state(SPACEDIM);
 
   sprintf(tmp_str, "%s",test_tree_str  );  
   player = str2node(tmp_str,'(',',');
@@ -531,8 +541,7 @@ int make_test_tree_c_double(char test_tree_str[])
 
     child = ((Node *) player->children[1]);
     (*code2c_str_table[(int) child->op])(child,tmp_str);
-    fprintf(stderr,"child 1 after conversion: %s\n",tmp_str); 
-    
+    fprintf(stderr,"child 1 after conversion: %s\n",tmp_str);     
   }
   else
   {
@@ -540,12 +549,9 @@ int make_test_tree_c_double(char test_tree_str[])
     fprintf(stderr,"tree after conversion: %s\n",tmp_str); 
   }
 
-
   free_node(player);
   return 0;
 }
-
-
 
 
 int make_test_tree(char test_tree_str[])
@@ -554,10 +560,8 @@ int make_test_tree(char test_tree_str[])
   Node *player;
  
   State S_result = make_state(SPACEDIM);
-
   sprintf(tmp_str, "%s",test_tree_str  );  
   player = str2node(tmp_str,'(',',');
-
   (*code2str_table[(int) player->op])(player,tmp_str);
 
   evaluate_tree(player, S_result);
@@ -576,10 +580,8 @@ int make_test_tree(char test_tree_str[])
 Node* node_from_str_lit(char tree_str[])
 {
   char tmp_str[MAXTREESTR];
- 
   sprintf(tmp_str, "%s",tree_str  );  
   return str2node(tmp_str,'(',',');
-
 }
 
 int test_tree_io(void)
@@ -587,11 +589,11 @@ int test_tree_io(void)
 
 #ifdef STEM_NODES
 
-//  make_test_tree_double("(((5.1,(5.5,5.5)S)A,(3,3)S)S,3.2)V"  ); 
+  make_test_tree_double("(((5.1,(5.5,5.5)S)A,(3,3)S)S,3.2)V"  ); 
 
 //  make_test_tree_c_double("((8.23e-05,(((p2,(p2,0.009076)A)A,p1)S,((((p2)T,p1)S,((p2)T,(p2)T)A)M,(((p2,p1)S,p2)M,p0)M)S)A)M,(3.691e-05,(((((p0,0.03891)S,p1)S,((p0,0.04903)S,(p1,p1)M)M)S)T,(((p0,p1)A,((p0,p1)A,0.4125)M)A)T)A)M)V"  ); 
 
-  make_test_itg("((8.23e-05,(((p2,(p2,0.009076)A)A,p1)S,((((p2)T,p1)S,((p2)T,(p2)T)A)M,(((p2,p1)S,p2)M,p0)M)S)A)M,(3.691e-05,(((((p0,0.03891)S,p1)S,((p0,0.04903)S,(p1,p1)M)M)S)T,(((p0,p1)A,((p0,p1)A,0.4125)M)A)T)A)M)V");
+//  make_test_itg("((8.23e-05,(((p2,(p2,0.009076)A)A,p1)S,((((p2)T,p1)S,((p2)T,(p2)T)A)M,(((p2,p1)S,p2)M,p0)M)S)A)M,(3.691e-05,(((((p0,0.03891)S,p1)S,((p0,0.04903)S,(p1,p1)M)M)S)T,(((p0,p1)A,((p0,p1)A,0.4125)M)A)T)A)M)V");
 
 #ifdef INTSTATES
 
@@ -664,10 +666,6 @@ int selectindex(int ntrees, double pexp)
     result = ntrees-2;
   return result;
 };
-
-
-
-
 
 
 
@@ -748,18 +746,12 @@ NodeScore makerandomns(int maxdepth,double fpr,double ppr, Experiment Exp)
   ns.S_i = makerandomstate(Exp.S_i);
 #endif
 
-#if INTPARS > 0
-  ns.ip = makerandomint_pars(Exp);
+#if SCALARPARS > 0
+  ns.ip = makerandomscalar_pars(Exp);
 #endif
 
   return ns;
-
 }
-
-
-
-
-
 
 
 
@@ -797,22 +789,22 @@ int is_terminal(Node *t)
 
 
 
-IntPars crossover_int_pars(IntPars ip1, IntPars ip2)
+ScalarPars crossover_scalar_pars(ScalarPars ip1, ScalarPars ip2)
 {
 
   int i;
   int divisor;
 
-  IntPars ip = make_int_pars(INTPARS);
+  ScalarPars ip = make_scalar_pars(SCALARPARS);
 
-  divisor = rand()%(INTPARS+1);
+  divisor = rand()%(SCALARPARS+1);
 
   for (i=0;i<divisor;i++)
   {
     *(ip.data+i) = *(ip1.data+i);
   }
 
-  for (i=divisor;i<INTPARS;i++)
+  for (i=divisor;i<SCALARPARS;i++)
   {
     *(ip.data+i) = *(ip2.data+i);
   }
@@ -838,8 +830,8 @@ NodeScore crossover_ns(NodeScore ns1,NodeScore ns2, double probswap, int top)
   newns.S_i = crossover_states(ns1.S_i, ns2.S_i);
 # endif
 
-#if INTPARS > 0
-  newns.ip = crossover_int_pars(ns1.ip, ns2.ip);
+#if SCALARPARS > 0
+  newns.ip = crossover_scalar_pars(ns1.ip, ns2.ip);
 
 #endif
 
@@ -1170,8 +1162,8 @@ NodeScore allmut(NodeScore ns, double probchange, Experiment Exp)
   newns.S_i = mut_state(ns.S_i);  // will become mutation on ns.S_i
 #endif
 
-#if INTPARS > 0
-  newns.ip = mut_int_pars(ns.ip, Exp);
+#if SCALARPARS > 0
+  newns.ip = mut_scalar_pars(ns.ip, Exp);
 #endif 
 
   return newns;
@@ -1244,10 +1236,9 @@ int compare_ns(NodeScore ns1, NodeScore ns2)
 
 #endif
 
-#if INTPARS > 0
- 
+#if SCALARPARS > 0
   int i;
-  for (i=0;i<INTPARS;i++)
+  for (i=0;i<SCALARPARS;i++)
   {
     if ( ns1.ip.data[i] != ns2.ip.data[i]   )  
     {
@@ -1456,14 +1447,14 @@ Point get_boundary(int i_iofile, int i, Point max_loc, int migrants)
 }
 
 
-IntPars str2int_pars(char * text)
+ScalarPars str2scalar_pars(char * text)
 {
 
   int i;
   char * p_end;
   char * p_next;
   char * tmp_str = (char *)malloc(sizeof(char)*(MAXTREESTR));
-  IntPars ip = make_int_pars(INTPARS);
+  ScalarPars ip = make_scalar_pars(SCALARPARS);
   int end_flag = 0;
 
   const char start_ch = '(';
@@ -1481,7 +1472,7 @@ IntPars str2int_pars(char * text)
   if (*tmp_str != start_ch)
   {
     fprintf(stderr,"Problem reading int pars. No opening bracket. \n"); 
-    free_int_pars(ip);
+    free_scalar_pars(ip);
     ip.data = NULL;
     return ip;
   }
@@ -1493,7 +1484,7 @@ IntPars str2int_pars(char * text)
    
   /* walk through other tokens */
   i=0;
-  while( (token != NULL) && (end_flag == 0) && (i<INTPARS) ) 
+  while( (token != NULL) && (end_flag == 0) && (i<SCALARPARS) ) 
   {
 
     if ( (p_end=strchr(token, end_ch)) != NULL  )
@@ -1502,32 +1493,31 @@ IntPars str2int_pars(char * text)
       *p_end = '\0';
     }
 
+#ifdef DOUBLEPARS
+    *(ip.data+i) = atof(token);
+#else
     *(ip.data+i) = atoi(token);
-    
-    token = strtok_r(NULL, s, &saveptr);
+#endif
 
+    token = strtok_r(NULL, s, &saveptr);
     i++;
   }
 
-  if ( (i < INTPARS) || (end_flag == 0) )
+  if ( (i < SCALARPARS) || (end_flag == 0) )
   {
     fprintf(stderr,"Problem reading int pars. Saved data length %d.\n",i);
-    free_int_pars(ip);
+    free_scalar_pars(ip);
     ip.data = NULL;
     return ip;    
   }
-
   free(tmp_str);
-
   return ip;
 }
 
 
 
 
-
-
-int int_pars2bufferline(NodeScore ns, char treebuffer[], IntPars ip )
+int scalar_pars2bufferline(NodeScore ns, char treebuffer[], ScalarPars ip )
 {
   char tmp_str[MAXTREESTR];
   int i;
@@ -1535,12 +1525,18 @@ int int_pars2bufferline(NodeScore ns, char treebuffer[], IntPars ip )
   sprintf(tmp_str,"(");
   strcat(treebuffer,  tmp_str ); 
 
-  for (i=0;i<INTPARS;i++)
+  for (i=0;i<SCALARPARS;i++)
   {
+
+#ifdef DOUBLEPARS
+    sprintf(tmp_str,"%0.8g", *(ip.data+i) );
+#else
     sprintf(tmp_str,"%d", *(ip.data+i) );
+#endif
+
     strcat(treebuffer,  tmp_str );
 
-    if (i<INTPARS-1)
+    if (i<SCALARPARS-1)
     {
       sprintf(tmp_str,",");
       strcat(treebuffer,  tmp_str ); 
@@ -1567,8 +1563,8 @@ int NodeScore2bufferline(NodeScore ns, char treebuffer[] )
   strcat(treebuffer,  hor_delim ); // add space
 
 
-#if INTPARS > 0
-  int_pars2bufferline(ns, treebuffer, ns.ip);
+#if SCALARPARS > 0
+  scalar_pars2bufferline(ns, treebuffer, ns.ip);
   strcat(treebuffer,  hor_delim ); 
 #endif
 
@@ -1591,9 +1587,6 @@ int NodeScore2c_string(NodeScore ns, char treebuffer[] )
   /* add string containing score and tree in bracket notation to treebuffer string */
 
   char tmp_str[MAXTREESTR];
-  const char hor_delim[2] = " ";
-
-
 
   /* add tree */
   (*code2c_str_table[(int) ns.node->op])(ns.node,tmp_str); /* convert tree to string */
@@ -1790,8 +1783,8 @@ NodeScore bufferline2NodeScore(char tmp_str[], char * infile)
 
   NodeScore ns;
 
-#if INTPARS > 0
-  IntPars ip;
+#if SCALARPARS > 0
+  ScalarPars ip;
 #endif
 
 #ifdef EVOLVEIC
@@ -1818,11 +1811,11 @@ NodeScore bufferline2NodeScore(char tmp_str[], char * infile)
   }
 
 
-#if INTPARS > 0
+#if SCALARPARS > 0
   token = strtok(NULL,hor_delim);
   if (token != NULL) 
   {
-    ip = str2int_pars(token);
+    ip = str2scalar_pars(token);
        
     if (ip.data == NULL)
     {
@@ -1895,7 +1888,7 @@ NodeScore bufferline2NodeScore(char tmp_str[], char * infile)
     ns.S_i = S;
 #endif
 
-#if INTPARS > 0
+#if SCALARPARS > 0
     ns.ip = ip;
 #endif
 
@@ -2687,9 +2680,9 @@ void random_init(Population pop,  Experiment Exp)
       user_functions(newns);
 
 #ifdef EVOLVEIC
-      error = get_score(newns.node, newns.S_i, Exp);   
+      error = get_score(newns, newns.S_i, Exp);   
 #else 
-      error = get_score(newns.node, Exp.S_i, Exp); 
+      error = get_score(newns, Exp.S_i, Exp); 
 #endif
       if (error <1e18) 
       {
@@ -3019,7 +3012,12 @@ void c_nextgen(int my_number,int qsubs,int runlen,int popsize, int compgridsize,
  
  //     fprintf(stderr,"size=%d    \n",size);  
 
+#if MAXHEIGHT2 > 0
+      if ( (tree_height( ((Node *) newns.node)->children[0],0) < MAXHEIGHT ) && (tree_height( ((Node *) newns.node)->children[1],0) < MAXHEIGHT2 ) && (size > -1) && (size < MAXSIZE) )
+#else
       if ( (tree_height(newns.node,0) < MAXHEIGHT ) && (size > -1) && (size < MAXSIZE) )
+#endif
+
       {  
     /* perform optimization here */    
 
@@ -3035,9 +3033,9 @@ void c_nextgen(int my_number,int qsubs,int runlen,int popsize, int compgridsize,
         {
 
  #ifdef EVOLVEIC
-          error = get_score(newns.node, newns.S_i, Exp);
+          error = get_score(newns, newns.S_i, Exp);
  #else
-          error = get_score(newns.node, Exp.S_i, Exp);
+          error = get_score(newns, Exp.S_i, Exp);
  #endif
         }
  
@@ -3065,7 +3063,6 @@ void c_nextgen(int my_number,int qsubs,int runlen,int popsize, int compgridsize,
           // fill tree array for new generation
           //trees2[i] = newns; /* found an acceptable tree */
           pop_next.pop[i] = newns;
-
           pop_next.totsize +=size;
           pop_next.toterror += error;
           if (error < pop_next.minerror)
@@ -3080,15 +3077,10 @@ void c_nextgen(int my_number,int qsubs,int runlen,int popsize, int compgridsize,
           free_node_score(newns);  // tree not useable with error 1e19, discard
         }
 #else
-
         pop_next.pop[i] = newns;
-
         pop_next.totsize +=size;
-
         i++; // increment loop counter
-
 #endif  
-
       }
       else
       {

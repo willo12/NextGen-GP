@@ -7,8 +7,8 @@
 #include <math.h>
 #include <time.h>
 
-#include <states.h>
 #include <compile_options.h>
+#include <states.h>
 #include <node_structures.h>
 #include <fields.h>
 #include <basic_ops.h>
@@ -51,7 +51,7 @@ char treebuffer[TREEBUFFER];
 
 // local function definitions
 void update_regs(State S, int n, int steps_forc, double *ffs);
-Experiment RK4(Node *tree, State S_i, Experiment Exp);
+Experiment RK4(NodeScore ns, State S_i, Experiment Exp);
 int init_reg(Experiment Exp);
 double score_fun_basic(Experiment Exp);
 
@@ -81,44 +81,57 @@ int free_experiment(Experiment E)
 }
 
 
-IntPars makerandomint_pars(Experiment Exp)
+ScalarPars makerandomscalar_pars(Experiment Exp)
 {
   int i;
  
-  IntPars ip = make_int_pars(INTPARS);
+  ScalarPars ip = make_scalar_pars(SCALARPARS);
 
   // initialize
-  for (i=0;i<INTPARS;i++)
+  for (i=0;i<SCALARPARS;i++)
   {
     *(ip.data+i) = 0; 
+#ifdef DOUBLEPARS
+    *(ip.data+i) = randomdouble(); 
+#else
+    // enter specific detailed lines here
+    *(ip.data+i) = SPACEDIM + rand()%(Exp.Iffs.dims.cols-1); 
+#endif
   }
-
-  // enter specific detailed lines here
-  *(ip.data) = SPACEDIM + rand()%(Exp.Iffs.dims.cols-1); 
-
   return ip;
 }
 
 
-IntPars mut_int_pars(IntPars ip, Experiment Exp)
+ScalarPars mut_scalar_pars(ScalarPars ip, Experiment Exp)
 {
-
   int i;
-  int i_forc, jump_range;
+
   int rnd;
 
-  IntPars new_ip = make_int_pars(INTPARS);
+  ScalarPars new_ip = make_scalar_pars(SCALARPARS);
 
-
-  for (i=0;i<INTPARS;i++)
+  for (i=0;i<SCALARPARS;i++)
   {
-
     rnd = rand()%10;
-
-    if (rnd < 5)
+    if (rnd < 5) // in this case mutate this scalarpars dimension
     {
-      i_forc = ip.data[i] - SPACEDIM;
+#ifdef DOUBLEPARS
+      if (rnd < 2)
+      {
+        new_ip.data[i] = randomdouble();
+      }
+      else if (rnd <3)
+      {
+        new_ip.data[i] = 1.04*new_ip.data[i];
+      }
+      else
+      {
+        new_ip.data[i] = 0.96*new_ip.data[i];
+      }
 
+#else
+      int jump_range;
+      int i_forc = ip.data[i] - SPACEDIM;
       if (rnd < 3)
       {
         jump_range = 3;
@@ -127,24 +140,20 @@ IntPars mut_int_pars(IntPars ip, Experiment Exp)
       {
         jump_range = rand()%30+1;
       }
-
       i_forc += (rand()%jump_range - ( (int) ( (double) jump_range)/2.0 )  );
       i_forc = i_forc%(Exp.Iffs.dims.cols-1);
-      
       if (i_forc < 0)
       {
         i_forc = i_forc + (Exp.Iffs.dims.cols-1);
       }
-        
       new_ip.data[i] = i_forc + SPACEDIM;
-
+#endif
     }
-    else
+    else // do not mutate this scalarpars dimension
     {
       new_ip.data[i] = ip.data[i];
     }
   }
-
   return new_ip;
 }
 
@@ -229,9 +238,6 @@ void update_regs(State S,int n, int steps_forc, double *ffs)
 
 #if SPACEDIM == 1
     reg[0]=S.data[0];
-#elif SPACEDIM == 2
-    reg[0]=S.data[0];
-    reg[1]=S.data[1];
 #else
 
   for (i=0;i<SPACEDIM;i++)  // SPACEDIM for speed
@@ -272,7 +278,7 @@ void update_regs(State S,int n, int steps_forc, double *ffs)
 }
 
 
-Experiment RK4(Node *tree, State S_i, Experiment Exp)
+Experiment RK4(NodeScore ns, State S_i, Experiment Exp)
 {
 /*
   Runge Kutta 4 solver of tree equation. 
@@ -328,7 +334,6 @@ Experiment RK4(Node *tree, State S_i, Experiment Exp)
 
   while (steps_forc<m) /* integration loop */
   {
-
 //    fill result
     for (i=0;i<SPACEDIM;i++)
     {
@@ -354,7 +359,7 @@ Experiment RK4(Node *tree, State S_i, Experiment Exp)
 
 //    update_regs(S, n, steps_forc, t_elapsed, dt_forc, Exp.Iffs.data);
       update_regs(S, n, steps_forc, Exp.Iffs.data);
-      evaluate_tree(tree, k1);
+      evaluate_ns(ns, k1);
 
 
       /* Runge Kutta term k2 */
@@ -365,7 +370,7 @@ Experiment RK4(Node *tree, State S_i, Experiment Exp)
       /* deposit S values and forcing in registers reg[] and run tree */
   //    update_regs(S_arg, n, steps_forc, t_elapsed + dt/2, dt_forc, Exp.Iffs.data);  
       update_regs(S_arg, n, steps_forc, Exp.Iffs.data);  
-      evaluate_tree(tree, k2);
+      evaluate_ns(ns, k2);
 
       /* Runge Kutta term k3 */
       for (i=0;i<SPACEDIM;i++)
@@ -374,7 +379,7 @@ Experiment RK4(Node *tree, State S_i, Experiment Exp)
       }
   //    update_regs(S_arg, n, steps_forc, t_elapsed + dt/2, dt_forc, Exp.Iffs.data);
       update_regs(S_arg, n, steps_forc, Exp.Iffs.data);
-      evaluate_tree(tree, k3);
+      evaluate_ns(ns, k3);
 
       /* Runge Kutta term k4 */
       for (i=0;i<SPACEDIM;i++)
@@ -383,7 +388,7 @@ Experiment RK4(Node *tree, State S_i, Experiment Exp)
       }
   //    update_regs(S_arg, n, steps_forc, t_elapsed + dt, dt_forc, Exp.Iffs.data); 
       update_regs(S_arg, n, steps_forc, Exp.Iffs.data); 
-      evaluate_tree(tree, k4);
+      evaluate_ns(ns, k4);
 
       /* increment S */
       for (i=0;i<SPACEDIM;i++)
@@ -432,7 +437,7 @@ Experiment RK4(Node *tree, State S_i, Experiment Exp)
 }
 
 
-Experiment euler(Node *tree, State S_i, Experiment Exp)
+Experiment euler(NodeScore ns, State S_i, Experiment Exp)
 {
 // RESULT IS ON FORCING TIME STEP
 
@@ -465,7 +470,7 @@ Experiment euler(Node *tree, State S_i, Experiment Exp)
     for (i_rel=0;i_rel<TS_FACTOR;i_rel++)
     {
       update_regs(S, n, steps_forc, Exp.Iffs.data);
-      evaluate_tree(tree, k1);
+      evaluate_ns(ns, k1);
 
       for (i=0;i<SPACEDIM;i++)
       {
@@ -586,12 +591,9 @@ int init_reg(Experiment Exp)
 
 double score_fun_basic(Experiment Exp)
 {
-
-  
   int j;
   double error, tmp_error0;
  
-
   error = 0;
 
 #if OBSCOLS == 1
@@ -615,12 +617,10 @@ double score_fun_basic(Experiment Exp)
         error += tmp_error0*tmp_error0;
       }
     }
-
 # else
-    tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols+k] - Exp.result.data[Exp.I.data[j]*SPACEDIM+k];
+    tmp_error0 = Exp.obs.data[j*Exp.obs.dims.cols] - Exp.result.data[Exp.I.data[j]*SPACEDIM];
     error += tmp_error0*tmp_error0;
 # endif
-
   }
 
 #else
@@ -686,7 +686,6 @@ int make_itg_fun(NodeScore ns, char template[], char total_str[])
 {
 
   char filename[30];
-  char tmp_str[MAXTREESTR];
   char calc_str[MAXTREESTR];
   char ic_str[MAXTREESTR];
  
@@ -704,16 +703,13 @@ int make_itg_fun(NodeScore ns, char template[], char total_str[])
   return 0;
 }
 
-Population pop2c(Population pop)
+void pop2c(Population pop)
 {
 
   int i;
 
   char filename[30];
   char file_out[30];
-
-  char tmp_str[MAXTREESTR];
-
   char template[MAXTEMPLATESIZE];
   char tmp_str_long[MAXTEMPLATESIZE];
 
@@ -793,9 +789,9 @@ Population score_pop(Population pop_old,Population pop, Experiment Exp, int comp
     else
     {
 #  ifdef EVOLVEIC
-      error = get_score(pop.pop[i].node, pop.pop[i].S_i, Exp);
+      error = get_score(pop.pop[i], pop.pop[i].S_i, Exp);
 #  else
-      error = get_score(pop.pop[i].node, Exp.S_i, Exp);
+      error = get_score(pop.pop[i], Exp.S_i, Exp);
 #  endif
       leafcount = conparcount(pop.pop[i].node, current);
       *current = 0;
@@ -820,12 +816,12 @@ Population score_pop(Population pop_old,Population pop, Experiment Exp, int comp
 }
 
 
-double get_score(Node *newtree, State S_i, Experiment Exp)
+double get_score(NodeScore ns, State S_i, Experiment Exp)
 {
   double error;
 
 #ifdef DEBUG
-  if (check_node(newtree) == 1)
+  if (check_node(ns.node) == 1)
   {
     fprintf(stderr,"Debug Mode: Illegal node encountered in get_score. Aborting. \n");
     exit(-1);
@@ -839,10 +835,10 @@ double get_score(Node *newtree, State S_i, Experiment Exp)
   free_node(runtree);
 #else
 
-# ifdef RK4
-  RK4(newtree,S_i, Exp);
+# ifdef USE_RK4
+  RK4(ns,S_i, Exp);
 # else
-  euler(newtree,S_i, Exp);
+  euler(ns,S_i, Exp);
 # endif
 
 #endif
@@ -851,7 +847,6 @@ double get_score(Node *newtree, State S_i, Experiment Exp)
   if (Exp.result.data[0] <1e18) 
   {
     error = score_fun_basic( Exp);
- 
     return error;
   }
   else
@@ -945,21 +940,17 @@ void c_single_tree(char treestr[], int ts_factor, double * S_init_array)
 {
   int i;
   char tmp_str[MAXTREESTR];
-
   char result_file[] = "result";
   char score_file[] = "score_val";
-
   Field score_field = make_field(make_dims(1,1));
 
   Node *newtree;
-  
   double error;
 
   State S_i;
 
   srand( getpid()+time(NULL)  );
   Experiment Exp = make_experiment(ts_factor);
-
   init_tables();
   init_reg(Exp);
 
@@ -971,8 +962,6 @@ void c_single_tree(char treestr[], int ts_factor, double * S_init_array)
   {
     S_i = init_state(SPACEDIM, S_init_array);    
   }
-
-/*  sprintf(tmp_str,"(-7.75295e-07,E)V"); */
 
   strcpy(tmp_str,treestr); /* leave original in tact: string will be altered on interpretation */
 
@@ -991,7 +980,9 @@ void c_single_tree(char treestr[], int ts_factor, double * S_init_array)
 
   printf("ts_factor: %d \n",ts_factor);
 
-  error = get_score(newtree, S_i, Exp);
+  NodeScore ns = tree_in_nodescore(newtree);
+
+  error = get_score(ns, S_i, Exp);
 
   printf("score: %g \n",error);
 
