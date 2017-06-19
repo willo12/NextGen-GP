@@ -320,10 +320,11 @@ def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/pape
 
   return (Iffs, obs,I)
 
-def glacial(smooth=0,t_obs=0,t_forc=0, t_start = -int(2.5e6), dt=50, startscore_t=None, ts_factor=2, interp=False, obs_file ='PROJECTS/paper_glac/raymo_d18_trunc.txt', forcing_files = 'j_65north_trunc.txt*1e3^2',forcing_substeps=2, random_comp=0.0):
+def glacial(smooth=0,t_obs=0,t_forc=0, t_start = -int(2.5e6), dt=50, startscore_t=None, ts_factor=2, interp=False, obs_file ='PROJECTS/paper_glac/raymo_d18_trunc.txt',obs_error=0, forcing_files = 'j_65north_trunc.txt*1e3^2',forcing_substeps=2, random_comp=0.0):
 
+#  obs_error = int(obs_error)
 
-  Iffs, obs_tmp,I = get_files(forcing_files = forcing_files, obs_file = obs_file, t_start = t_start,forcing_substeps=forcing_substeps, random_comp = random_comp)
+  Iffs, obs_tmp,I = get_files(forcing_files = forcing_files, obs_file = obs_file,obs_error=obs_error, t_start = t_start,forcing_substeps=forcing_substeps, random_comp = random_comp)
 
   Iffs = Iffs[t_forc:,:]
 #  I = get_grid(obs_tmp[:,0],dt,t0 = t_start)

@@ -13,7 +13,7 @@
 #define TANH_ONCE
 #define OBSCOLS 1
 #define EVOLVEIC
-//#define OBSERROR
+#define OBSERROR
 //#define COMPILE
 
 //#define CUSTOM_NODES
@@ -28,7 +28,7 @@
 #define STACKSIZE 2000
 
 #define MAXHEIGHT 8
-#define MAXHEIGHT2 4
+#define MAXHEIGHT2 5
 
 #define RESTRICTED_PARS 0
 
