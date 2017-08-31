@@ -13,9 +13,7 @@ import sys
 def get_elite(name,qsubs=400,i_end=-1, dtype={'names':('score','col','S_init','tree'),'formats':('f4','S10000','S10000','S10000')}  ):
 
   HOME = os.environ['HOME']
-
   path = os.path.join(HOME,'DATA',name,'elite%d')
-
   L=[]
 
   for i in xrange(qsubs):
@@ -51,9 +49,7 @@ def extract_elite(name,qsubs=400,i_end=-1, substring_filter='' , dtype={'names':
 
   """
 
-
   HOME = os.environ['HOME']
-
   path = os.path.join(HOME,data_dir,name,'elite%d')
 
   if verbose:
@@ -88,10 +84,7 @@ def get_elite_stab(name,qsubs=400,i_end=-1, substring_filter='', tolerance=10, d
 
   Returns:
     the tree string, stability score, the number of attempts to find a stable tree
-     
-
   """
-
 
   L = extract_elite(name,qsubs,i_end, substring_filter, dtype=dtype, names = names, data_dir = data_dir)  
 
@@ -127,13 +120,9 @@ def elite_cluster(name,qsubs=400,i_end=-1, substring_filter='', tolerance=10, dt
 
   """
 
-
   L = extract_elite(name,qsubs,i_end, substring_filter, dtype = dtype)  
-
   L = [(e[0], "%s %s"%(e[1],e[2]) , Node.from_newick(e[2])   ) for e in L  ]
-
   L.sort()
-
   items_min = [] 
 
   while (len(L)>0):
@@ -178,13 +167,10 @@ def best_per_int_par(L, n_int_par=21):
   return np.array(result)
 
 
-
-
-def elite_int_pars(name,qsubs=400,i_end=-1, substring_filter='', tolerance=10, dtype={'names':('score','col','S_init','tree'),'formats':('f4','S10000','S10000','S10000')} , d_min=50, SPACEDIM=2):
+def elite_scalar_pars(name,qsubs=400,i_end=-1, substring_filter='', tolerance=10, dtype={'names':('score','col','S_init','tree'),'formats':('f4','S10000','S10000','S10000')} , d_min=50, SPACEDIM=2):
 
   """
-  Find frequencies of parameters for lat runs when force_params_node is called due to INT_PARS>0 in my_ops.c in NextGen, and so all forcing terms are made equal to int_par in trees.
-     
+  Find frequencies of parameters for lat runs when force_params_node is called due to SCALARPARS>0 in my_ops.c in NextGen, and so all forcing terms are made equal to int_par in trees.
 
   Example: [(16, 3), (17, 1), (18, 4), (19, 2), (20, 3), (21, 87)]
 
@@ -248,13 +234,13 @@ if __name__ == "__main__":
         i_end = int(sys.argv[3])
 
         if len(sys.argv) > 4:
-          if sys.argv[4] == 'int_pars':
-            print "using cols format"
+          if sys.argv[4] == 'scalar_pars':
+            print "using scalar_pars format"
             dtype={'names':('score','col','S_init','tree'),'formats':('f4','S10000','S10000','S10000')}
         
-    result = get_elite_stab(name, qsubs,i_end,'' , dtype=dtype, names = ('score','S_init','tree') )
+    result = get_elite_stab(name, qsubs,i_end,'' , dtype=dtype, names = None )
 
-    print "%s %s"%(result[0][1],result[0][2])
+    print "".join(["%s "%str(e) for e in result[0]])
 
-
+   
 #    print get_elite(name, qsubs)

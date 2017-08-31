@@ -5,7 +5,7 @@ from math import sqrt
 import numpy as np
 #import nextgen
 import os
-from treetools import find_initial_conditions
+from treetools import parse_params_tree_str
 from runtools import launch, getf, putf, load_config, single_run
 from my_data import synth, epica, glacial
 import h5py as hdf
@@ -18,7 +18,7 @@ from validate import Validator
 
 #from spacegrids import dlmread
 
-colors = ['b','r','g','y','c']
+colors = ['b','r','darkgreen','y','c']
 
 descr = ['obs','$S_1$','$S_2$','$S_3$','$S_4$']
 
@@ -28,6 +28,7 @@ HOME = os.getenv("HOME")
 fig_name = 'runtree_series'
 fig_type = 'eps'
 
+show_f = False
 print_flag = False
 show_flag = True
 iteration = '30'
@@ -83,8 +84,8 @@ if __name__ == "__main__":
 
 # run tree
   config = load_config()
-  (tree, S_init_array) = find_initial_conditions(tree)    
-  Iffs,result,obs_other,I, tree,ts_factor,startscore_i, S_init, otime, scores = single_run(tree=tree,config = config, S_init_array = S_init_array)
+  (tree, S_init_array, scalars) = parse_params_tree_str(tree)    
+  Iffs,result,obs_other,I, tree,ts_factor,startscore_i, S_init, otime, scores = single_run(tree=tree,config = config, S_init_array = S_init_array, scalars = scalars)
 # end run tree
 
   otime = otime*1e-3
@@ -110,6 +111,10 @@ if __name__ == "__main__":
   for i in range(result.shape[1]):
     c, = plt.plot(otime,result_plot[:,i],colors[i+1]); 
     handles.append(c)
+
+
+  if show_f:
+    plt.plot(Iffs[:,0]*1e-3 , Iffs[:,1] ,color='grey')
 
 
   if show_MIS:

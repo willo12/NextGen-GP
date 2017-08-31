@@ -414,7 +414,7 @@ def stability_test(tree,config=None,ts_factor=[2,8], S_init_array = None):
 
   return stab_scores
 
-def single_run(tree,config=None,ts_factor=None, S_init_array=None):
+def single_run(tree,config=None,ts_factor=None, S_init_array=None, scalars=None):
   """
   Run one tree
 
@@ -439,6 +439,9 @@ def single_run(tree,config=None,ts_factor=None, S_init_array=None):
     S_init_array = np.zeros(spacedim)
     S_init_array[0] = S_init 
 
+  if scalars is None:
+    scalars = np.array([0.0])
+
   prep_data(config) # create local data files
 
   Iffs, obs,I, startscore_i, result, otime = prep_run(config)
@@ -460,7 +463,7 @@ def single_run(tree,config=None,ts_factor=None, S_init_array=None):
   results = []
 
   for i, treestr in enumerate(tree):    
-    nextgen.single_tree(treestr, S_init_array,ts_factor[i])
+    nextgen.single_tree(treestr, S_init_array,scalars,ts_factor[i])
 
     results.append(np.loadtxt(result_file))
     scores.append(float(np.loadtxt(score_file)))

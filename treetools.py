@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import re
 from math import sqrt
 import numpy as np
 
@@ -49,6 +50,10 @@ def nw_split(text):
 
 
 def newick2Latex(text, index_start=0):
+
+
+  if ' ' in text:
+    raise ValueError("No spaces allowed in tree string %s"%text)
 
   pieces = {}
   output = '**** LATEX *******\n\n'
@@ -122,18 +127,28 @@ def newick2human(text, pieces = None, SPACEDIM=2, index_start=0,dtype=float):
 # -------- end Latex tools -----
 
 
-def find_initial_conditions(tree_str, dtype=float):
+def parse_params_tree_str(tree_str, dtype=float):
 
-  if " " in tree_str:
-    L = tree_str.split(" ")
-    tree = L[1]
-    IC_string = L[0]
+  S_init_array = None
+  scalars = None
 
-    return (tree, np.array( [dtype(e) for e in  IC_string.strip("()").split(",") ] ) )
+  tree_str = re.sub('\s+',' ',tree_str).strip()
+
+  L = tree_str.split(" ")
+ 
+  if L:
+   tree = L.pop()
   else:
-    return (tree_str, None )
-    
+   raise Exception("Provide tree string at least.")
 
+  if L:
+    S_init_array = np.array( [dtype(e) for e in  L.pop().strip("()").split(",") ] )
+
+  if L:
+    scalars = np.array( [dtype(e) for e in  L.pop().strip("()").split(",") ] )
+
+  return (tree, S_init_array, scalars )
+    
 
 def protected_mem(i,numpar,spacedim=6):
 
