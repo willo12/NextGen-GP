@@ -32,7 +32,7 @@ def norm_error(series):
 
     return 2*(new_series)/max(abs(new_series[:,0]))
 
-def get_grid(obs_times,dt = 50,t0 = -int(2.5e6),t_end=0):
+def get_grid_int(obs_times,dt = 50,t0 = -int(2.5e6),t_end=0):
 
   obs_times = np.round(obs_times).astype(int)
 
@@ -54,6 +54,29 @@ def get_grid(obs_times,dt = 50,t0 = -int(2.5e6),t_end=0):
 #  print 'Prepared time indices of length %d vs obs lengths %d'%(len(indices),len(obs_times))
 
   return np.array(indices)
+
+def get_grid(obs_times,dt = 50,t0 = -int(2.5e6),t_end=0):
+
+ # obs_times = np.round(obs_times).astype(int)
+
+#  runsteps = int((t_end - t0)/dt+1)
+
+ # print t0, dt
+
+  forcing_range = np.arange(t0, t_end, dt)
+
+  indices=[]
+  for obs_t in obs_times:
+    ic = np.isclose(forcing_range, obs_t,atol=1e-3)
+    if ic.any():
+       indices.append(np.where(ic)[0][0])
+#    else:
+#      print("obs_t not found: %g"%obs_t)
+
+  print 'Prepared time indices of length %d vs obs lengths %d'%(len(indices),len(obs_times))
+
+  return np.array(indices)
+
 
 def dlmread(filepath, datatype='float'):
   """
@@ -317,6 +340,8 @@ def get_files(forcing_files = 'j_65north_trunc.txt^2' , obs_file ='PROJECTS/pape
     raise Exception("Data Setting Error: I must be shorter than obs. All obs time steps must be divisible by dt_forc. Also, t_start (%d vs obs %d) must be within data file range. Shape I: %s, shape obs: %s."%(t_start, obs[0,0], I.shape[0] , obs.shape[0]))
 
   obs = obs[:I.shape[0],:]
+
+ # raise Exception(obs)
 
   return (Iffs, obs,I)
 

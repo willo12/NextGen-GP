@@ -454,6 +454,16 @@ Node *make_const_node(char op, double value)
 
 // random node functions
 
+double randomdouble_slope(double avg, double amp)
+{
+  /* Produce a random floating point number */
+
+  double value =avg + amp*(( (double) (2*rand() -RAND_MAX) )/RAND_MAX);
+
+  return value;
+}
+
+
 double randomdouble(void)
 {
   /* Produce a random floating point number, with some biases */
@@ -465,7 +475,6 @@ double randomdouble(void)
   double value = (( (double) (2*rand() -RAND_MAX) )/RAND_MAX);
 
   value = trunc(t*value)/t;
-
 
   if (i<1)
   {
@@ -479,7 +488,6 @@ double randomdouble(void)
   {
     p = rand()%14-7;
   }
-
   return value*pow(10,p);
 }
 
@@ -490,7 +498,6 @@ Node *makerandomparnode(int max_par)
 #else
   return make_par_node(par_op_char, (int)  rand()%max_par );
 #endif
-
 }
 
 

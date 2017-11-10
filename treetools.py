@@ -3,6 +3,16 @@
 import re
 from math import sqrt
 import numpy as np
+import warnings
+
+def latex_float(f):
+    float_str = "{0:.2g}".format(f)
+    if "e" in float_str:
+        base, exponent = float_str.split("e")
+        return r"{0} \times 10^{{{1}}}".format(base, int(exponent))
+    else:
+        return float_str
+
 
 # ---- Latex tools -----
 
@@ -49,7 +59,29 @@ def nw_split(text):
     return result
 
 
-def newick2Latex(text, index_start=0):
+
+def node2Latex(node, index_start=1):
+
+
+  pieces = {}
+  output = '**** LATEX *******\n\n'
+  
+  for i, child in enumerate(node.children):
+    output += '$ \\dot{S_%d} = %s $ \\newline \\newline \n'%(i+1,child.to_latex())
+
+
+
+  return output
+
+
+def newick2Latex(text, index_start=1, SPACEDIM=2):
+
+  try:
+    node=Node.from_newick(text)
+    SPACEDIM = len(node.children)
+  except:
+    warnings.warn('Tree cannot be parsed using Node.from_newick. Leaving SPACEDIM = %d'%SPACEDIM)
+    SPACEDIM = 2
 
 
   if ' ' in text:
@@ -58,7 +90,7 @@ def newick2Latex(text, index_start=0):
   pieces = {}
   output = '**** LATEX *******\n\n'
   
-  output += '$ \\dot{S} = %s $ \\newline \\newline \n'%newick2human(text,pieces, index_start=index_start)
+  output += '$ \\dot{S} = %s $ \\newline \\newline \n'%newick2human(text,pieces, index_start=index_start, SPACEDIM=SPACEDIM)
 
   coef_list = pieces.items()
   coef_list.sort()
@@ -77,9 +109,9 @@ def newick2Latex(text, index_start=0):
 
   return output
 
-def newick2human(text, pieces = None, SPACEDIM=2, index_start=0,dtype=float):
+def newick2human(text, pieces = None, SPACEDIM=2, index_start=1,dtype=float):
 
-  strings = {'V':'[%s , %s]','A':'(%s + %s)','S':'(%s - %s)','M':'%s %s','D':'%s / %s','Q': '\sqrt{%s}','I':'%s $ for $ %s>0 $ and $ %s $ otherwise $ ', 'T':'tanh(%s)'}
+  strings = {'V':'[' + ',\n '.join(['%s']*SPACEDIM) + ']','A':'%s + %s','S':'%s - %s','M':'(%s) (%s)','D':'(%s) / (%s)','Q': '\sqrt{%s}','I':'%s $ for $ %s>0 $ and $ %s $ otherwise $ ', 'T':'tanh(%s)'}
 
   leaf_ops = {'Q':'\sqrt','E':'e','O':'1/','T':'tanh','L':'log'}
 
@@ -104,13 +136,14 @@ def newick2human(text, pieces = None, SPACEDIM=2, index_start=0,dtype=float):
       newvarname='a_%d'%len([el for el in pieces if 'a' in el])
       pieces[newvarname] = 'placeholder'
 
-      pieces[newvarname] = strings[opcode]%tuple([newick2human(ct,pieces, index_start=index_start) for ct in [childtexts[1], childtexts[0],childtexts[2] ]  ])
+      pieces[newvarname] = strings[opcode]%tuple([newick2human(text=ct,pieces=pieces,SPACEDIM=SPACEDIM, index_start=index_start,dtype=dtype) for ct in [childtexts[1], childtexts[0],childtexts[2] ]  ])
 
       return newvarname
 
-    return strings[opcode]%tuple([newick2human(ct,pieces, index_start=index_start) for ct in childtexts])
+    return strings[opcode]%tuple([newick2human(text=ct,pieces=pieces,SPACEDIM=SPACEDIM, index_start=index_start,dtype=dtype) for ct in childtexts])
 
   else:
+ 
     if text in leaf_ops:
       return leaf_ops[text]
 
@@ -139,7 +172,7 @@ def parse_params_tree_str(tree_str, dtype=float):
   if L:
    tree = L.pop()
   else:
-   raise Exception("Provide tree string at least.")
+   raise Exception("Provide at least a tree string.")
 
   if L:
     S_init_array = np.array( [dtype(e) for e in  L.pop().strip("()").split(",") ] )
@@ -256,18 +289,40 @@ def dexFun(reg,x):
   return x
 
 
+def reverse_sign(op_sign):
+ 
+  if (op_sign == '+'):
+   
+    return '-'
+  else:
+    return '+'
 
 funcs = {'A':addFun, 'S':subFun,'M':mulFun,'I':ifFun, 'G':isgreaterFun, 'E':iseqFun, 'N':copyFun,'R':storeFun,
          'L':ldaFun, 'l':lda_xFun, 'X':ldxFun, 's':sta_xFun, 'x':stxFun, 'i':inxFun, 'd':dexFun}
 
 
+additive = {'A':'+','S':'-'}
+multiplicative = {'M':'','S':'/'}
+
+functions = {'T':'tanh(%s)','Q':'\sqrt(%s)'}
+
 
 class Node(object):
+
+
+#  strings = {'V':'[' + ', '.join(['%s']*SPACEDIM) + ']','A':'%s + %s','S':'%s - %s','M':'(%s) (%s)','D':'(%s) / (%s)','Q': '\sqrt{%s}','I':'%s $ for $ %s>0 $ and $ %s $ otherwise $ ', 'T':'tanh(%s)'}
+
+#  leaf_ops = {'Q':'\sqrt','E':'e','O':'1/','T':'tanh','L':'log'}
+
+
+
+
+
 
   def __repr__(self):
     return self.op
 
-  def __init__(self,op,children=[]): 
+  def __init__(self,op,children=[], op_table = {'A':'+'}): 
 
     self.op = op
     self.children = children
@@ -279,14 +334,13 @@ class Node(object):
   @classmethod
   def from_newick(cls,text,dtype=float):
 
-
     if '(' in text:
       opcode = text[-1]
       childrentext = text[1:-2]
 
       childtexts = nw_split(childrentext)
     
-      return Node(opcode, [cls.from_newick(ct,dtype=dtype) for ct in childtexts])
+      return cls(opcode, [cls.from_newick(ct,dtype=dtype) for ct in childtexts])
     else:
       if 'p' in text:
         return ParamNode(int(text[1:]))
@@ -300,6 +354,39 @@ class Node(object):
     print (' '*indent) + self.__repr__()
     for c in self.children:
       c.walk(indent+1)
+
+
+  def mbrack(self):
+
+    if self.op in functions:
+      return self.to_latex()
+
+    if self.__class__ is TermNode:
+      return self.to_latex()
+
+    if self.children:
+      return '(%s)'%self.to_latex()
+    else:
+      return self.to_latex()
+
+
+  def to_latex(self):
+
+    
+    if self.op in additive:
+      op_sign = additive[self.op]
+#      if isinstance(self.children[1],ConstNode):
+#        if (self.children[1].value < 0):
+#          op_sign = reverse_sign(op_sign)
+
+      return ' '.join([self.children[0].to_latex(), op_sign ,  self.children[1].to_latex() ] ).replace('+ -','- ')
+    elif self.op in multiplicative:
+      return ' '.join([self.children[0].mbrack(), multiplicative[self.op] ,  self.children[1].mbrack() ] )
+    elif self.op in functions:
+      return functions[self.op]%self.children[0].to_latex()
+    else:
+      return '%s'%self
+
 
   def is_equal(self, other):
 
@@ -374,7 +461,7 @@ class ParamNode(TermNode):
 
 
   def __repr__(self):
-    return "p%d"%self.index
+    return "S_%d"%(self.index+1)
 
   def __init__(self,index ): 
 
@@ -400,7 +487,7 @@ class ConstNode(TermNode):
 
   def __repr__(self, dtype=float):
     if dtype is float:
-      return '%g'%self.value
+      return latex_float(self.value)
     else:
       return '%d'%self.value
 

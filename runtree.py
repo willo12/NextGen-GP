@@ -18,7 +18,7 @@ from validate import Validator
 
 #from spacegrids import dlmread
 
-colors = ['b','r','darkgreen','y','c']
+colors = ['b','r','lawngreen','k','y']
 
 descr = ['obs','$S_1$','$S_2$','$S_3$','$S_4$']
 
@@ -104,12 +104,12 @@ if __name__ == "__main__":
 
   fig = plt.figure(1)
 
-  c, = plt.plot(otime,obs[startscore_i:,0],colors[0]); # plot obs
+  c, = plt.plot(otime,obs[startscore_i:,0],colors[0], linewidth=2); # plot obs
 
   handles = [c,]
 
   for i in range(result.shape[1]):
-    c, = plt.plot(otime,result_plot[:,i],colors[i+1]); 
+    c, = plt.plot(otime,result_plot[:,i],colors[i+1], linewidth=1.3); 
     handles.append(c)
 
 

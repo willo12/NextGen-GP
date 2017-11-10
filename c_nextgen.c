@@ -335,12 +335,18 @@ int free_pop(Population pop)
 ScalarPars make_scalar_pars(int size)
 {
   ScalarPars ip;
+  int i;
 
 #ifdef DOUBLEPARS
   ip.data = (double *)malloc(sizeof(double)*size);
 #else
   ip.data = (int *)malloc(sizeof(int)*size);
 #endif
+
+  for (i=0;i<size;i++) // for testing
+  {
+    *(ip.data+i) = 99e-10;
+  }
 
   return ip;
 }
@@ -2025,7 +2031,7 @@ int check_brackets(char *tmp_str, char left_bracket)
     }
     else if ( tmp_str[i] == ' '  )
     {
-      fprintf(stderr,"Error: tree str cannot contain spaces");
+      fprintf(stderr,"Error: tree str cannot contain spaces.\n");
       return -1;    
     }
 

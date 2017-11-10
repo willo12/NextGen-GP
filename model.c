@@ -87,17 +87,17 @@ ScalarPars makerandomscalar_pars(Experiment Exp)
  
   ScalarPars ip = make_scalar_pars(SCALARPARS);
 
-  // initialize
+#ifdef DOUBLEPARS
+  *(ip.data+0) = trunc(randomdouble_slope(-2e-4,0.5e-4)*DOUBLETRUNC)/DOUBLETRUNC; 
+  *(ip.data+1) = trunc(randomdouble_slope(0.0,4)*DOUBLETRUNC)/DOUBLETRUNC; 
+  *(ip.data+2) = trunc(randomdouble_slope(1.0,0.3)*DOUBLETRUNC)/DOUBLETRUNC; 
+#else
   for (i=0;i<SCALARPARS;i++)
   {
-    *(ip.data+i) = 0; 
-#ifdef DOUBLEPARS
-    *(ip.data+i) = randomdouble(); 
-#else
-    // enter specific detailed lines here
     *(ip.data+i) = SPACEDIM + rand()%(Exp.Iffs.dims.cols-1); 
-#endif
   }
+#endif
+
   return ip;
 }
 
@@ -110,12 +110,19 @@ ScalarPars mut_scalar_pars(ScalarPars ip, Experiment Exp)
 
   ScalarPars new_ip = make_scalar_pars(SCALARPARS);
 
-  for (i=0;i<SCALARPARS;i++)
+#ifdef DOUBLEPARS
+
+  *(new_ip.data+0) = trunc(randomdouble_slope(-2e-4,0.5e-4)*DOUBLETRUNC)/DOUBLETRUNC; 
+  *(new_ip.data+1) = trunc(randomdouble_slope(0.0,4)*DOUBLETRUNC)/DOUBLETRUNC; 
+  *(new_ip.data+2) = trunc(randomdouble_slope(1.0,0.3)*DOUBLETRUNC)/DOUBLETRUNC; 
+
+#else
+  for (i=0;i<SCALARPARS-1;i++)
   {
     rnd = rand()%10;
     if (rnd < 5) // in this case mutate this scalarpars dimension
     {
-#ifdef DOUBLEPARS
+
       if (rnd < 2)
       {
         new_ip.data[i] = randomdouble();
@@ -129,7 +136,6 @@ ScalarPars mut_scalar_pars(ScalarPars ip, Experiment Exp)
         new_ip.data[i] = 0.96*new_ip.data[i];
       }
 
-#else
       int jump_range;
       int i_forc = ip.data[i] - SPACEDIM;
       if (rnd < 3)
@@ -147,13 +153,16 @@ ScalarPars mut_scalar_pars(ScalarPars ip, Experiment Exp)
         i_forc = i_forc + (Exp.Iffs.dims.cols-1);
       }
       new_ip.data[i] = i_forc + SPACEDIM;
-#endif
+
     }
     else // do not mutate this scalarpars dimension
     {
       new_ip.data[i] = ip.data[i];
     }
   }
+
+#endif
+
   return new_ip;
 }
 
@@ -361,7 +370,6 @@ Experiment RK4(NodeScore ns, State S_i, Experiment Exp)
       update_regs(S, n, steps_forc, Exp.Iffs.data);
       evaluate_ns(ns, k1);
 
-
       /* Runge Kutta term k2 */
       for (i=0;i<SPACEDIM;i++)
       {
@@ -396,7 +404,6 @@ Experiment RK4(NodeScore ns, State S_i, Experiment Exp)
         S_dot_dt.data[i] = (k1.data[i] + 2.0*k2.data[i] + 2.0*k3.data[i] + k4.data[i])*dt/6.0;
         S.data[i] += S_dot_dt.data[i];
       }
-
 
   /* degeneracy checks */
       for (i=0;i<SPACEDIM;i++)
@@ -502,7 +509,7 @@ Experiment euler(NodeScore ns, State S_i, Experiment Exp)
 
 
 
-void c_map_f(char *treestring, double *A, double *B, int shape_i, int shape_j, double S0_start, double S1_start, double S0_end, double S1_end, double *forcing, int forcing_dim)
+void c_map_f(char *treestring, double *A, double *B, int shape_i, int shape_j, double S0_start, double S1_start, double S0_end, double S1_end, double *forcing, double *scalars, int forcing_dim)
 {
   /* For specific forcing value, create two 2D arrays of tree values for S vector values between -2 and 2. */
 
@@ -549,6 +556,16 @@ void c_map_f(char *treestring, double *A, double *B, int shape_i, int shape_j, d
 
 /*  printf("dS0: %g, dS1: %g \n",dS0,dS1); */
 
+  NodeScore ns = tree_in_nodescore(tree);
+# if (SCALARPARS > 0) && defined(DOUBLEPARS) 
+  ns.ip = make_scalar_pars(SCALARPARS);
+  for (i=0;i<SCALARPARS;i++)
+  {
+    *(ns.ip.data+i) = *(scalars+i);
+  }
+# endif
+
+
   for (j=0;j<shape_j;j++)
   {
     reg[0] = S0_start;
@@ -558,7 +575,7 @@ void c_map_f(char *treestring, double *A, double *B, int shape_i, int shape_j, d
 /*      printf("%g %g %g \n",reg[0],reg[1], reg[2]); */
 //      (*op_table[tree->op])(tree,0); /* run tree and deposit in buffers[:] */
 
-      evaluate_tree(tree, S_result);
+      evaluate_ns(ns, S_result);
 
       A[j*shape_i+i] =  S_result.data[0];
       B[j*shape_i+i] =  S_result.data[1];
@@ -936,7 +953,7 @@ Experiment make_experiment(int ts_factor)
 }
 
 
-void c_single_tree(char treestr[], int ts_factor, double * S_init_array)
+void c_single_tree(char treestr[], int ts_factor, double * S_init_array, double * scalars)
 {
   int i;
   char tmp_str[MAXTREESTR];
@@ -967,7 +984,7 @@ void c_single_tree(char treestr[], int ts_factor, double * S_init_array)
 
   if ((check_brackets(treestr,'(') == -1) || (check_brackets(treestr,'[') == -1) )
   {
-    fprintf(stderr, "Bracket check failed, exiting. \n");
+    fprintf(stderr, "Exiting. Bracket check yields error for %s \n",treestr);
     exit(-1);
   }
 
@@ -978,9 +995,14 @@ void c_single_tree(char treestr[], int ts_factor, double * S_init_array)
     printf("S%d: %g, ",i,S_i.data[i]);
   }
 
-  printf("ts_factor: %d \n",ts_factor);
-
   NodeScore ns = tree_in_nodescore(newtree);
+# if (SCALARPARS > 0) && defined(DOUBLEPARS) 
+  ns.ip = make_scalar_pars(SCALARPARS);
+  for (i=0;i<SCALARPARS;i++)
+  {
+    *(ns.ip.data+i) = *(scalars+i);
+  }
+# endif
 
   error = get_score(ns, S_i, Exp);
 

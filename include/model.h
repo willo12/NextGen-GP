@@ -42,12 +42,12 @@ int free_experiment(Experiment E);
 ScalarPars makerandomscalar_pars(Experiment Exp);
 ScalarPars mut_scalar_pars(ScalarPars ip, Experiment Exp);
 State handle_S_init(double S_init, Experiment Exp);
-void c_map_f(char *treestring, double *A, double *B, int shape_i, int shape_j, double S0_start, double S1_start, double S0_end, double S1_end, double *forcing, int forcing_dim);
+void c_map_f(char *treestring, double *A, double *B, int shape_i, int shape_j, double S0_start, double S1_start, double S0_end, double S1_end, double *forcing, double *scalars, int forcing_dim);
 Population score_pop(Population pop_old,Population pop, Experiment Exp, int compgridsize, int check_exist);
 double get_score(NodeScore ns, State S_i, Experiment Exp);
 
 Experiment make_experiment(int ts_factor);
-void c_single_tree(char treestr[], int ts_factor, double * S_init_array);
+void c_single_tree(char treestr[], int ts_factor, double * S_init_array, double * scalars);
 
 #endif
 

@@ -5,7 +5,7 @@
 #define SPACEDIM 2   // spatial dimension of dynamical system
 #define COMPARTMENTS 4
 
-//#define I_START_POLY 1
+#define I_START_POLY 0
 //#define DOUBLEPARS
 #define SCALARPARS 0
 
@@ -28,7 +28,7 @@
 #define STACKSIZE 2000
 
 #define MAXHEIGHT 8
-#define MAXHEIGHT2 5
+#define MAXHEIGHT2 3
 
 #define RESTRICTED_PARS 0
 

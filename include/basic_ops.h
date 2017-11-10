@@ -72,6 +72,8 @@ Node *make_const_node(char human_op, double value);
 Node *make_zero_fun_node(void);
 
 double randomdouble(void);
+double randomdouble_slope(double avg, double amp);
+
 Node *makerandomparnode(int max_par);
 Node *makerandomparfunnode(int max_par);
 Node *makerandomconstnode(void);
